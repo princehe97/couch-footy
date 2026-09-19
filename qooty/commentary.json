@@ -1,0 +1,215 @@
+{
+  "Ruck Contest": [
+    "{player} gets the hit out",
+    "Exquisite ruckwork by {player}",
+    "{player} leaps majestically into air and taps it down",
+    "{player} wins the ruck contest easily",
+    "A soaring leap from {player} to win the tap",
+    "{player} directs the ball down to their rovers"
+  ],
+  "Loose Ball Get": [
+    "{player} bursts onto a loose ball",
+    "Cleanly gathered by {player}",
+    "{player} runs onto the ball at full tilt",
+    "{player} scoops up the ball with one hand",
+    "{player} is first to the scene and takes possession",
+    "The ball is loose, and {player} swoops in!"
+  ],
+  "Free Kick Paid": [
+    "{player} lowers the knees, lifts the elbow, and wins the free!",
+    "The crowd want BAALLLLLL and the umpire pays it!",
+    "Everybody is bemused as the umpire conjures a free kick to {player}",
+    "Contact below the knees! It is {player}'s ball.",
+    "{player} is held in the contest and gets the free",
+    "Umpire spots an infringement! Free kick {player}"
+  ],
+  "Free Paid Against": [
+    "Umpire says {player} has thrown the ball",
+    "{player} has run way too far.",
+    "That looks like a push in the back by {player}",
+    "{player} is in trouble here... GAWN!!!",
+    "{player} gets caught with the ball! Holding the ball!",
+    "High tackle by {player}! Whistle blows immediately"
+  ],
+  "Hard Ball Get": [
+    "{player} wins it from the bottom of the pack",
+    "Ball is up for grabs, who wants it? {player} does!",
+    "{player} extracts the ball",
+    "{player} wins a crucial 50/50 contest",
+    "{player} puts their head over it and wins the hard ball",
+    "Burrowing into the pack, {player} comes out with it"
+  ],
+  "Contested Mark Taken": [
+    "{player}, strong hands in the pack, takes a mark.",
+    "{player} ragdolls {oppo} and takes a strong mark",
+    "{player} absolutely manhandles {oppo} and marks",
+    "{player} rises over the pack for the mark",
+    "{player} clunks a big one in the contest!",
+    "Spectacular grab by {player}! The crowd is on its feet!",
+    "{prev} puts it to a dangerous spot and {player} uses {oppo} as a stepladder!"
+  ],
+  "Spoil": [
+    "The kick has been spoiled and ball goes to ground",
+    "{player} is outbodied in the contest",
+    "{player}'s marking attempt is spoiled",
+    "{oppo} gets a hand in at the last moment",
+    "Big fist comes through! Spoiled by {oppo}",
+    "{player} couldn't hold onto that one under pressure"
+  ],
+  "Uncontested Mark Taken": [
+    "{player} takes an easy mark uncontested",
+    "{player} has plenty of space to take the mark",
+    "{player} takes a diving mark on the lead",
+    "{player} takes the easy chest mark",
+    "{prev} sends in a bullet pass which is marked by {player}",
+    "Simple lead and mark for {player}",
+    "{prev} finds {player} in acres of space for the mark!",
+    "Lovely weighted pass from {prev} hits {player} on the chest."
+  ],
+  "No Mark": [
+    "Mark is not paid, the umpire says it's not 15",
+    "{player} tries to claim the mark but the umpires says PLAY ON",
+    "{player} can't catch a cold at the moment",
+    "{player} drops a simple chest mark",
+    "Fumbled by {player}! No mark paid",
+    "Ball spills through {player}'s fingers"
+  ],
+  "Tackle Laid": [
+    "{oppo} land a big shirtfront and {player} has not moved!",
+    "{player} is immediately tackled",
+    "{player} can't break the tackle",
+    "{player} has been gang tackled",
+    "{oppo} wraps {player} up like a Christmas present!",
+    "Massive hit! {player} is taken down by {oppo}",
+    "{oppo} from nowhere! Brilliant run down tackle on {player}!"
+  ],
+  "Player Dispossessed": [
+    "{player} has been stripped of the ball",
+    "{player} fumbles at the crucial moment",
+    "{player} has taken off but has left the ball behind..",
+    "{player} squibs the contest and gives up possession.",
+    "{oppo} knocks the ball loose from {player}",
+    "{player} is caught in two minds and loses it",
+    "Fantastic defensive effort from {oppo} to strip the ball from {player}!"
+  ],
+  "Breakaway": [
+    "{player} manages to break out into space",
+    "{player} glides across the ground like a gazelle",
+    "{player} burns everyone off with a burst of speed",
+    "{player} breaks free from the congestion",
+    "{player} finds an extra gear and explodes away!",
+    "Clean getaway by {player} into the open field"
+  ],
+  "Chip Forwards": [
+    "{player} finesses a short kick forwards",
+    "{player} just hacks it forward",
+    "{player} does a cute little chip kick forwards",
+    "{player} rolls around quickly and throws it on the boot",
+    "The notorious show-off {player} tries one of those fancy bicycle kicks",
+    "{player} look to move it quickly with a short kick"
+  ],
+  "Chip Sideways": [
+    "{player} chips the ball sideways",
+    "{player} turns and moves the ball laterally by foot",
+    "{player} wants to change the angle and passes sideways.",
+    "{player} sees no good options up forward, so attempts a switch.",
+    "The switch is on! {player} kicks it across the field",
+    "{player} goes sideways to a waiting teammate"
+  ],
+  "Handball Forwards": [
+    "{player} sends the ball forward by hand",
+    "{player} does a long handball that's as good as a kick.",
+    "{player} want to move it fast with a punchy handball",
+    "{player} finds a runner with a clever handball",
+    "Direct handball forwards by {player}",
+    "{player} keeps the momentum going by hand"
+  ],
+  "Handball Sideways": [
+    "{player} attempts to find a teammate by hand",
+    "{player} tries flicking it to a running teammate",
+    "Fast hands on display by {player}",
+    "Suspicious handball by {player} but the umpire let's it go.",
+    "{player} plays it safe with a lateral handball",
+    "Working it sideways now, {player} finds an option"
+  ],
+  "Run and Bounce": [
+    "{player} goes for a run and takes a couple of bounces",
+    "{player} shows off a bit of leg speed by taking a couple of bounces",
+    "{player} has the time and space to run forward and touch the ball on the ground",
+    "{player} decides to take 'em on in a footrace with a couple bounces",
+    "Bouncing down the wing goes {player}!",
+    "{player} creates some territory with a dashing run"
+  ],
+  "Long Bomb": [
+    "{player} bombs it long",
+    "{player} just goes for distance with a booming kick",
+    "{player} decides to kick it as long as possible.",
+    "{player} swings around and unleashes a powerful kick",
+    "Deep into the 50 from {player}!",
+    "{player} loads up the cannon and fires it long"
+  ],
+  "Goal Kicked": [
+    "{player} puts it straight through the big sticks for a goal",
+    "Umpires have a conference, and yes, it is a goal for {player}",
+    "{player} pumps up the crowd after kicking a brilliant goal",
+    "{player} has kicked one of the goals of the year!",
+    "No one can believe that's bounced through, accidental goal to {player}!",
+    "The {team} fans are erupting! {player} kicks a beauty!"
+  ],
+  "Behind Kicked": [
+    "{player}'s shot is wayward and only registers a point",
+    "{player} has shanked it, it's lucky to even score.",
+    "{player} starts celebrating prematurely... because it's a behind.",
+    "{player}'s kick doesn't come back enough, minor score.",
+    "Slams it into the post! {player} registers a behind",
+    "Through for a point. {player} will be disappointed with that."
+  ],
+  "Boundary Throw In": [
+    "The ball has trickled over the boundary line",
+    "Out of bounds! We'll have a throw in.",
+    "Boundary umpire's whistle blows. Throw in coming up.",
+    "No clean take, it's over the line.",
+    "Ball is out! Boundary throw in.",
+    "Tipped over the line. We reset with a throw in."
+  ],
+  "Smothered": [
+    "{oppo} produces a brilliant smother to deny {player}",
+    "{player}'s disposal is smothered off the boot!",
+    "{oppo} dives desperately and smothers the ball!",
+    "Sensational smother by {oppo} on {player}!",
+    "{oppo} launches themselves at the ball and gets a big smother!",
+    "Great defensive pressure from {oppo}! The disposal is smothered!"
+  ],
+  "Ball Spills Free": [
+    "The ball has spilled loose!",
+    "The ball has beaten everybody and rolls free.",
+    "Nobody can take clean possession as it spills free!",
+    "{player} can't gather cleanly and the ball spills loose.",
+    "The ball squirts free from the pack!"
+  ],
+  "Ball Up For Grabs": [
+    "The ball is there for the taking!",
+    "Who wants the ball? It's up for grabs!",
+    "The ball is up for grabs in congestion!",
+    "Critical contest coming up with the ball loose!"
+  ],
+  "Torpedo Kick": [
+    "{player} winds up and launches an absolute barrel!",
+    "{player} unleashes a monster torpedo from the center square!",
+    "Here comes the torp! {player} sends a booming torpedo towards goal!",
+    "{player} loads up the cannon and launches a massive torp!",
+    "Huge roost from {player}! That torpedo has got some carry on it!"
+  ],
+  "No Score": [
+    "{player} has blazed away at goal and doesn't even score!",
+    "{player}'s shot drifts wide and goes out on the full!",
+    "Out on the full! A terrible miss from {player}.",
+    "{player} kicks it straight out of bounds on the full!",
+    "No score! {player} misses everything."
+  ],
+  "Releasing Handball": [
+    "{player} releases a teammate with a quick handball.",
+    "Quick hands from {player} releases a runner into space.",
+    "{player} fires off a releasing handball."
+  ]
+}
