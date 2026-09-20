@@ -8,38 +8,22 @@ When both exist, CSV is preferred. Place TeamSelection.csv next to TeamSelection
 from __future__ import annotations
 
 import csv
-import json
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-# region agent log
-_DEBUG_LOG = Path(__file__).resolve().parents[2] / "debug-5c3432.log"
-
-
 def _agent_log(location: str, message: str, data: dict | None = None, hypothesis_id: str = "?") -> None:
-	try:
-		rec = {
-			"sessionId": "5c3432",
-			"timestamp": int(time.time() * 1000),
-			"location": location,
-			"message": message,
-			"data": data or {},
-			"hypothesisId": hypothesis_id,
-		}
-		with _DEBUG_LOG.open("a", encoding="utf-8") as f:
-			f.write(json.dumps(rec, default=str) + "\n")
-	except Exception:
-		pass
-
-
-# endregion
+	"""Compatibility no-op for retired development diagnostics."""
+	return None
 
 CSV_NAME = "TeamSelection.csv"
 XLS_NAME = "TeamSelection.xls"
 
 
 from qooty.player_attributes import DEFAULT_STATS, PlayerStats
+
+
+class DuplicatePlayerNameError(ValueError):
+	"""Two roster entries share a player name."""
 
 
 @dataclass(frozen=True)
@@ -56,6 +40,20 @@ class RosterData:
 	source: str
 	home_player_stats: dict[str, PlayerStats] = field(default_factory=dict)
 	away_player_stats: dict[str, PlayerStats] = field(default_factory=dict)
+
+
+	def __post_init__(self) -> None:
+		seen: dict[str, str] = {}
+		for side, players in (("Home", self.home_players), ("Away", self.away_players)):
+			for number, name in enumerate(players, 1):
+				key = name.strip().casefold()
+				location = f"{side} player {number}"
+				if key in seen:
+					raise DuplicatePlayerNameError(
+						f'Duplicate player name "{name.strip()}" at {seen[key]} and {location}. '
+						"Every player across both teams must have a unique name."
+					)
+				seen[key] = location
 
 
 def _scalar_str(value: object) -> str:

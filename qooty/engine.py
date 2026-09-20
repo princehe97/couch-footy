@@ -10,9 +10,10 @@ import pandas as pd
 import pygame
 
 from qooty import match_settings
-from qooty.team_selection import _agent_log, load_roster
+from qooty.team_selection import _agent_log, load_roster, DuplicatePlayerNameError
 from qooty.match_state import MatchState
-from qooty.reports import write_player_stat_exports
+from qooty.reports import (write_player_stat_exports, TextCSVWriter,
+    TextCSVDictWriter, write_dataframe_csv)
 
 state = MatchState()
 
@@ -70,14 +71,13 @@ def _scaled_mouse_get_pos():
 pygame.mouse.get_pos = _scaled_mouse_get_pos
 
 # Defining the variables that load the various background images for screens using absolute paths
-from qooty.paths import PROJECT_ROOT, get_output_path
+from qooty.paths import get_output_path, get_resource_path
 
-start_bg = pygame.image.load(str(PROJECT_ROOT / 'start.png'))
-game_bg = pygame.image.load(str(PROJECT_ROOT / 'gamescreen.png'))
-general_bg = pygame.image.load(str(PROJECT_ROOT / 'generic.png'))
+start_bg = pygame.image.load(str(get_resource_path('start.png')))
+game_bg = pygame.image.load(str(get_resource_path('gamescreen.png')))
 
 # Load commentary data from JSON
-with open(str(PROJECT_ROOT / 'qooty' / 'commentary.json'), 'r') as f:
+with open(get_resource_path('qooty/commentary.json'), 'r', encoding='utf-8') as f:
     COMMENTARY_DATA = json.load(f)
 
 #defining variables that set the fonts and respective sizes
@@ -733,13 +733,13 @@ class Player(object):
 	def StartIntLog():
 		with open(get_output_path('InterchangeLog.csv'), 'w', newline = '\n') as Int_CSV:
 			fieldnames = ['QTR', 'TIME', 'PLAYER'] + Player.stat_categories + ['TEAM', 'POSITION']
-			writer = csv.DictWriter(Int_CSV, fieldnames=fieldnames)
+			writer = TextCSVDictWriter(Int_CSV, fieldnames=fieldnames)
 			writer.writeheader()
 	
 	def Interchange_WriteInfo():
 		with open(get_output_path('InterchangeLog.csv'), 'a', newline = '\n') as Int_CSV:
 			fieldnames = ['QTR', 'TIME', 'PLAYER'] + Player.stat_categories + ['TEAM', 'POSITION']
-			Int_writer = csv.DictWriter(Int_CSV, fieldnames = fieldnames)
+			Int_writer = TextCSVDictWriter(Int_CSV, fieldnames = fieldnames)
 			if state.possession == "Home":
 				On_Player = state.home.pos_players[KeyON]
 				Off_Player = state.home.pos_players[KeyOFF]
@@ -1301,7 +1301,7 @@ class sim_game(object):
 
 	def EndOfQuarterScore():
 		with open(get_output_path('PlayerStats.csv'), 'a', newline= '\n') as RecordQTRscore:
-			Q_scoreWriter = csv.writer(RecordQTRscore)
+			Q_scoreWriter = TextCSVWriter(RecordQTRscore)
 			if state.qtr - 1 == 1:
 				Q_scoreWriter.writerow(['QTR',state.home.name + ' G',state.home.name + ' B',state.home.name + ' S',state.away.name + ' G',state.away.name + ' B',state.away.name + ' S'])
 			Q_scoreWriter.writerow([state.qtr-1,str(state.home_goals),str(state.home_behinds),str(state.home_score),str(state.away_goals),str(state.away_behinds),str(state.away_score)])
@@ -1397,7 +1397,7 @@ class sim_game(object):
 		cols = ['TEAM'] + [c for c in df.columns if c != 'TEAM']
 		df = df[cols]
 		
-		df.to_csv(get_output_path('PlayerStats.csv'), mode = 'a')
+		write_dataframe_csv(df, get_output_path('PlayerStats.csv'), mode = 'a')
 
 #team stats
 		df_home = df.iloc[0:20].drop(columns=['TEAM'])
@@ -1407,7 +1407,7 @@ class sim_game(object):
 		Join_df = [HomeTeamTotal, AwayTeamTotal]
 		TeamStats = pd.concat(Join_df, axis = 1)
 		TeamStats.columns = [state.home.name, state.away.name]
-		TeamStats.to_csv(get_output_path('TeamStats.csv'))
+		write_dataframe_csv(TeamStats, get_output_path('TeamStats.csv'))
 #form calc (BOG Rebuild)
 		for p, stats in FullStats.items():
 			# SI bonus depends on whether it resulted in a goal or behind
@@ -1439,10 +1439,10 @@ class sim_game(object):
 		Three_Votes = df_form.iat[0,1]
 		Two_Votes = df_form.iat[1,1]
 		One_Vote = df_form.iat[2,1]
-		df_form.to_csv(get_output_path('Form.csv'))
+		write_dataframe_csv(df_form, get_output_path('Form.csv'))
 #3-2-1 vote under stats
 		with open(get_output_path('PlayerStats.csv'), 'a', newline= '\n') as AddBOGVotes:
-			vote_writer = csv.writer(AddBOGVotes)
+			vote_writer = TextCSVWriter(AddBOGVotes)
 			vote_writer.writerow(['\n'])
 			vote_writer.writerow(['VOTES'])
 			vote_writer.writerow([3, 2, 1])
@@ -1480,7 +1480,7 @@ class sim_game(object):
 		production_report = pd.concat([df_home_clean, df_away_clean], axis=1)
 		
 		# Save without the row numbers (index=False)
-		production_report.to_csv(get_output_path('MatchReport.csv'), index=False)
+		write_dataframe_csv(production_report, get_output_path('MatchReport.csv'), index=False)
 #write scoring summary
 		with open(get_output_path("Scoring Summary.txt"), 'w') as ss:
 			ss.write("SCORING SUMMARY" + "\n")
@@ -2327,7 +2327,16 @@ class sim_game(object):
 		# endregion
 		_loop_logged = False
 		sim_game.GetRunSpeed()
-		Player.Initiate()
+		try:
+			Player.Initiate()
+		except DuplicatePlayerNameError as exc:
+			global playing_match, on_main_menu, post_match
+			state.sim_running = False
+			playing_match = False
+			post_match = False
+			on_main_menu = True
+			show_roster_error(str(exc))
+			return
 		# region agent log
 		_agent_log("engine.match_sim_running", "after_initiate", {"QTR": state.qtr}, "H3")
 		# endregion
@@ -2462,6 +2471,40 @@ class sim_game(object):
 			for event in pygame.event.get():
 				if event.type == pygame.QUIT:
 					pygame.quit()
+
+
+def show_roster_error(message: str) -> None:
+	"""Show the invalid roster until acknowledged; allow retry from the menu."""
+	global run
+	font = pygame.font.SysFont("Verdana", 17)
+	lines, line = [], ""
+	for char in " ".join(message.split()):
+		if font.size(line + char)[0] > ScreenWidth - 80:
+			lines.append(line)
+			line = ""
+		line += char
+	lines.append(line)
+	offset = 0
+	while True:
+		win.fill((25, 30, 25))
+		win.blit(myfont_main.render("Cannot start match", True, Soft_Red), (40, 30))
+		for i, text in enumerate(lines[offset:offset + 9]):
+			win.blit(font.render(text, True, White), (40, 80 + i * 24))
+		win.blit(font.render("Edit the roster, then select Play Footy again.", True, White), (40, 320))
+		win.blit(font.render("Enter / Esc: back     Up / Down: scroll", True, White), (40, 350))
+		pygame.display.update()
+		for event in pygame.event.get():
+			if event.type == pygame.QUIT:
+				run = False
+				return
+			if event.type == pygame.KEYDOWN:
+				if event.key in (pygame.K_RETURN, pygame.K_ESCAPE):
+					return
+				if event.key == pygame.K_DOWN:
+					offset = min(max(0, len(lines) - 9), offset + 1)
+				if event.key == pygame.K_UP:
+					offset = max(0, offset - 1)
+		clock.tick(30)
 
 
 def main() -> None:

@@ -2,6 +2,12 @@
 
 A desktop Australian-rules football match simulator.
 
+## Easiest option
+
+Download `CouchFooty.exe`, place it in its own writable folder, and double-click
+it. On first launch it creates an editable `TeamSelection.csv` beside the
+executable. Match reports are written to an `outputs` folder in the same place.
+
 ## First run
 
 1. Install Python 3.11 or newer from <https://www.python.org/downloads/>.
