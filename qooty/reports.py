@@ -92,37 +92,40 @@ except ImportError:  # pragma: no cover
 # Commentary text file
 # ---------------------------------------------------------------------------
 
+def format_team_lineup(ms: MatchState) -> str:
+    """Forum code block with aligned columns and paired opposing field lines."""
+    h, a = ms.home, ms.away
+    positions = (
+        (a, ('rBP', 'FB', 'lBP')), (h, ('lFP', 'FF', 'rFP')),
+        (a, ('rHBF', 'CHB', 'lHBF')), (h, ('lHFF', 'CHF', 'rHFF')),
+        (a, ('rW', 'C', 'lW')), (h, ('lW', 'C', 'rW')),
+        (a, ('rHFF', 'CHF', 'lHFF')), (h, ('lHBF', 'CHB', 'rHBF')),
+        (a, ('rFP', 'FF', 'lFP')), (h, ('lBP', 'FB', 'rBP')),
+    )
+    rows = [tuple(team.player_at(pos) for pos in line) for team, line in positions]
+    # A shared width keeps all three columns even, including unusually long names.
+    width = max(25, max(len(name) for row in rows for name in row) + 3)
+    lines = ['[code=rich]' + ' ' * width + a.name]
+    for index, (left, middle, right) in enumerate(rows):
+        lines.append(f'{left:<{width}}{middle:<{width}}{right}')
+        if index % 2 == 1 and index < len(rows) - 1:
+            lines.append('')
+    lines.extend([' ' * width + h.name, ''])
+    for team in (h, a):
+        followers = ', '.join(team.player_at(pos) for pos in ('RUCK', 'RR', 'R'))
+        lines.append(f'{team.name} Foll : {followers}')
+    lines.append('')
+    for team in (h, a):
+        bench = ', '.join(team.player_at(pos) for pos in ('INT1', 'INT2'))
+        lines.append(f'{team.name} INT : {bench}')
+    return '\n'.join(lines) + '[/code]'
+
+
 def write_match_start_commentary(ms: MatchState) -> None:
     """Overwrite Commentary.txt with the match header and team line-ups."""
-    h, a = ms.home, ms.away
-    header = f"MATCH COMMENCING SHORTLY ... {h.name} vs {a.name}\n\n"
-
-    # Build lineup string (code-block style, mirrors original)
-    lines = [
-        f"[code=rich]                       {a.name}",
-        f"FB: {a.player_at('rBP')}|{a.player_at('FB')}|{a.player_at('lBP')}",
-        f"FF: {h.player_at('lFP')}|{h.player_at('FF')}|{h.player_at('rFP')}",
-        f"HB: {a.player_at('rHBF')}|{a.player_at('CHB')}|{a.player_at('lHBF')}",
-        f"HF: {h.player_at('lHFF')}|{h.player_at('CHF')}|{h.player_at('rHFF')}",
-        f"C: {a.player_at('rW')}|{a.player_at('C')}|{a.player_at('lW')}",
-        f"C: {h.player_at('lW')}|{h.player_at('C')}|{h.player_at('rW')}",
-        f"HF: {a.player_at('rHFF')}|{a.player_at('CHF')}|{a.player_at('lHFF')}",
-        f"HB: {h.player_at('lHBF')}|{h.player_at('CHB')}|{h.player_at('rHBF')}",
-        f"FF: {a.player_at('rFP')}|{a.player_at('FF')}|{a.player_at('lFP')}",
-        f"FB: {h.player_at('lBP')}|{h.player_at('FB')}|{h.player_at('rBP')}",
-        f"                       {h.name}",
-        "",
-        "[/code]"
-        f"{h.name} FOLL: {h.player_at('RUCK')}|{h.player_at('RR')}|{h.player_at('R')}",
-        f"{a.name} FOLL: {a.player_at('RUCK')}|{a.player_at('RR')}|{a.player_at('R')}",
-        "",
-        f"{h.name} INT: {h.player_at('INT1')}|{h.player_at('INT2')}",
-        f"{a.name} INT: {a.player_at('INT1')}|{a.player_at('INT2')}",
-    ]
-    lineup = "\n".join(lines)
-
+    header = f"Match commencing shortly ... {ms.home.name} v {ms.away.name}\n\n"
     with open("Commentary.txt", "w", encoding="utf-8") as f:
-        f.write(header + lineup + "\n\n")
+        f.write(header + format_team_lineup(ms) + "\n\n")
 
 
 def append_commentary_line(text: str) -> None:

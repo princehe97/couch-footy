@@ -63,6 +63,35 @@ class TeamState:
         """Return the un-prefixed opponent position matching *pos*."""
         return POSITION_MATCHUPS[pos]
 
+    def nearest_on_field_player(
+        self,
+        coord: tuple[int, int],
+        exclude: set[str] | None = None,
+    ) -> tuple[str, str] | None:
+        """Return ``(position, player)`` nearest to *coord*, excluding names.
+
+        Ties are random so a fixed position does not become the universal
+        fallback receiver. Followers and interchange players have no field
+        coordinate and are therefore not candidates.
+        """
+        excluded = exclude or set()
+        candidates: list[tuple[int, str, str]] = []
+        for player_coord, position in self.coord_to_pos().items():
+            player = self.pos_players.get(self.pos_key(position), "")
+            if not player or player in excluded:
+                continue
+            distance = abs(player_coord[0] - coord[0]) + abs(player_coord[1] - coord[1])
+            candidates.append((distance, position, player))
+        if not candidates:
+            return None
+        nearest_distance = min(candidate[0] for candidate in candidates)
+        nearest = [
+            (position, player)
+            for distance, position, player in candidates
+            if distance == nearest_distance
+        ]
+        return random.choice(nearest)
+
     def init_stats(self) -> None:
         """Create a zeroed stat sheet for every player on the roster."""
         for player in self.players:

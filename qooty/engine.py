@@ -11,11 +11,14 @@ import pygame
 
 from qooty import match_settings
 from qooty.team_selection import _agent_log, load_roster, DuplicatePlayerNameError
+from qooty.team_setup import TeamSetup, SetupClosed
 from qooty.match_state import MatchState
-from qooty.reports import (write_player_stat_exports, TextCSVWriter,
+from qooty.player_attributes import SkillAllocationError
+from qooty.reports import (format_team_lineup, write_player_stat_exports, TextCSVWriter,
     TextCSVDictWriter, write_dataframe_csv)
 
 state = MatchState()
+selected_roster = None
 
 pygame.init()
 
@@ -101,8 +104,9 @@ MENU_TAGLINE      = (210, 200, 170)   # warm off-white for subtitle text
 _BTN_W     = 220   # button width
 _BTN_H     =  44   # button height
 _BTN_X     = (ScreenWidth - _BTN_W) // 2   # horizontal centre
-_BTN_Y1    = 300   # "Play Footy" top edge
-_BTN_Y2    = 354   # "Settings"   top edge
+_BTN_Y1    = 272   # "Play Footy" top edge
+_BTN_Y2    = 316   # "How to Play" top edge
+_BTN_Y3    = 360   # "Settings" top edge
 _BTN_RADII = 6     # corner radius (drawn with rects + circles for pixel feel)
 
 myfont_menu_btn  = pygame.font.SysFont("Verdana", 18, bold=True)
@@ -197,17 +201,19 @@ def main_menu():
 	global on_main_menu
 	global playing_match
 	global settings
+	global instructions
+	global selected_roster, run
 
 	mx, my = mouse
 
 	# ── Tagline ──────────────────────────────────────────────────────────────
 	tagline = myfont_menu_tag.render("Quick Footy Action — Made with PyGame", 1, MENU_TAGLINE)
 	tag_x = (ScreenWidth - tagline.get_width()) // 2
-	win.blit(tagline, (tag_x, 276))
+	win.blit(tagline, (tag_x, 250))
 
 	# ── Button 1: Play Footy ─────────────────────────────────────────────────
-	btn1_rect = (_BTN_X, _BTN_Y1, _BTN_W, _BTN_H)
-	btn1_hover = _BTN_X + _BTN_W > mx > _BTN_X and _BTN_Y1 + _BTN_H > my > _BTN_Y1
+	btn1_rect = (_BTN_X, _BTN_Y1, _BTN_W, 36)
+	btn1_hover = _BTN_X + _BTN_W > mx > _BTN_X and _BTN_Y1 + 36 > my > _BTN_Y1
 
 	fill1   = MENU_OLIVE_HOVER if btn1_hover else MENU_OLIVE
 	label1_colour = MENU_AMBER_BRIGHT if btn1_hover else MENU_AMBER
@@ -215,35 +221,273 @@ def main_menu():
 
 	label1 = myfont_menu_btn.render(">  Play Footy", 1, label1_colour)
 	lx1 = _BTN_X + (_BTN_W - label1.get_width()) // 2
-	ly1 = _BTN_Y1 + (_BTN_H - label1.get_height()) // 2
+	ly1 = _BTN_Y1 + (36 - label1.get_height()) // 2
 	win.blit(label1, (lx1, ly1))
 
 	if btn1_hover and click[0] == 1:
-		on_main_menu = False
-		playing_match = True
+		try:
+			selected_roster = TeamSetup(win).run()
+		except SetupClosed:
+			run = False
+			return
+		on_main_menu = selected_roster is None
+		playing_match = selected_roster is not None
 		settings = False
+		instructions = False
 		pygame.time.delay(200)
 
-	# ── Button 2: Settings ───────────────────────────────────────────────────
-	btn2_rect = (_BTN_X, _BTN_Y2, _BTN_W, _BTN_H)
-	btn2_hover = _BTN_X + _BTN_W > mx > _BTN_X and _BTN_Y2 + _BTN_H > my > _BTN_Y2
+	# ── Button 2: How to Play ────────────────────────────────────────────────
+	btn2_rect = (_BTN_X, _BTN_Y2, _BTN_W, 36)
+	btn2_hover = _BTN_X + _BTN_W > mx > _BTN_X and _BTN_Y2 + 36 > my > _BTN_Y2
 
 	fill2   = MENU_OLIVE_HOVER if btn2_hover else MENU_OLIVE
 	label2_colour = MENU_AMBER_BRIGHT if btn2_hover else MENU_AMBER
 	_draw_menu_button(win, btn2_rect, fill2, MENU_BORDER)
 
-	label2 = myfont_menu_btn.render("*  Settings", 1, label2_colour)
+	label2 = myfont_menu_btn.render("?  How to Play", 1, label2_colour)
 	lx2 = _BTN_X + (_BTN_W - label2.get_width()) // 2
-	ly2 = _BTN_Y2 + (_BTN_H - label2.get_height()) // 2
+	ly2 = _BTN_Y2 + (36 - label2.get_height()) // 2
 	win.blit(label2, (lx2, ly2))
 
 	if btn2_hover and click[0] == 1:
 		on_main_menu = False
 		playing_match = False
+		settings = False
+		instructions = True
+		pygame.time.delay(80)
+
+	# ── Button 3: Settings ───────────────────────────────────────────────────
+	btn3_rect = (_BTN_X, _BTN_Y3, _BTN_W, 36)
+	btn3_hover = _BTN_X + _BTN_W > mx > _BTN_X and _BTN_Y3 + 36 > my > _BTN_Y3
+	fill3 = MENU_OLIVE_HOVER if btn3_hover else MENU_OLIVE
+	label3_colour = MENU_AMBER_BRIGHT if btn3_hover else MENU_AMBER
+	_draw_menu_button(win, btn3_rect, fill3, MENU_BORDER)
+	label3 = myfont_menu_btn.render("*  Settings", 1, label3_colour)
+	win.blit(label3, (_BTN_X + (_BTN_W - label3.get_width()) // 2,
+	                  _BTN_Y3 + (36 - label3.get_height()) // 2))
+	if btn3_hover and click[0] == 1:
+		on_main_menu = False
+		playing_match = False
 		settings = True
+		instructions = False
 		pygame.time.delay(80)
 
 	# ── Refresh display ──────────────────────────────────────────────────────
+	pygame.display.update()
+
+
+def open_instructions():
+	"""Draw the branded, single-page match guide available from the main menu."""
+	global on_main_menu, instructions, instructions_page, run
+
+	if instructions_page == 2:
+		open_stats_guide()
+		return
+
+	win.blit(start_bg, (0, 0))
+	panel = pygame.Surface((ScreenWidth, ScreenHeight), pygame.SRCALPHA)
+	panel.fill((8, 10, 5, 225))
+	win.blit(panel, (0, 0))
+
+	mx, my = mouse
+	title_font = pygame.font.SysFont("Verdana", 30, bold=True)
+	section_font = pygame.font.SysFont("Verdana", 14, bold=True)
+	body_font = pygame.font.SysFont("Consolas", 11, bold=True)
+	small_font = pygame.font.SysFont("Consolas", 10)
+
+	title = title_font.render("HOW TO PLAY", 1, MENU_AMBER)
+	win.blit(title, (18, 12))
+	subtitle = myfont_menu_tag.render("Your quick guide to match day", 1, MENU_TAGLINE)
+	win.blit(subtitle, (20, 46))
+	pygame.draw.line(win, MENU_BORDER, (18, 66), (622, 66), 2)
+
+	def _guide_card(x, y, w, h, number, heading, lines, accent=MENU_AMBER):
+		pygame.draw.rect(win, (22, 25, 14), (x, y, w, h))
+		pygame.draw.rect(win, (86, 91, 48), (x, y, w, h), 1)
+		pygame.draw.rect(win, MENU_OLIVE, (x, y, w, 27))
+		pygame.draw.rect(win, MENU_BORDER, (x, y, w, 27), 1)
+		pygame.draw.circle(win, accent, (x + 16, y + 13), 9)
+		num = small_font.render(str(number), 1, (25, 27, 14))
+		win.blit(num, (x + 16 - num.get_width() // 2, y + 13 - num.get_height() // 2))
+		hdr = section_font.render(heading, 1, MENU_AMBER_BRIGHT)
+		win.blit(hdr, (x + 31, y + 5))
+		for i, line in enumerate(lines):
+			win.blit(body_font.render(line, 1, RETRO_WHITE), (x + 10, y + 37 + i * 17))
+
+	_guide_card(18, 78, 194, 128, 1, "SET THE MATCH", [
+		"Choose Settings to tune:",
+		"- Weather & sim speed",
+		"- Home-ground advantage",
+		"- Competition mode",
+		"Use CSV or saved teams.",
+	])
+	_guide_card(223, 78, 194, 128, 2, "WATCH IT UNFOLD", [
+		"Select Play Footy.",
+		"The match sim runs itself:",
+		"contests, marks, tackles,",
+		"kicks and handballs play out",
+		"through live commentary.",
+	], (120, 190, 255))
+	_guide_card(428, 78, 194, 128, 3, "READ THE GAME", [
+		"Track the score and clock,",
+		"ball position, possession,",
+		"match leaders and momentum.",
+		"Player ratings shape how",
+		"each contest is resolved.",
+	], (255, 135, 110))
+
+	pygame.draw.rect(win, (36, 31, 10), (18, 218, 604, 58))
+	pygame.draw.rect(win, MENU_BORDER, (18, 218, 604, 58), 2)
+	win.blit(section_font.render("SCORING", 1, MENU_AMBER_BRIGHT), (30, 226))
+	win.blit(body_font.render("GOAL", 1, RETRO_WHITE), (145, 226))
+	win.blit(myfont_score_num.render("6", 1, RETRO_GOLD), (191, 222))
+	win.blit(body_font.render("points", 1, MENU_TAGLINE), (210, 226))
+	win.blit(body_font.render("BEHIND", 1, RETRO_WHITE), (315, 226))
+	win.blit(myfont_score_num.render("1", 1, RETRO_GOLD), (374, 222))
+	win.blit(body_font.render("point", 1, MENU_TAGLINE), (393, 226))
+	example = body_font.render("Example:  12 goals 8 behinds  =  12.8 (80)", 1, MENU_TAGLINE)
+	win.blit(example, ((ScreenWidth - example.get_width()) // 2, 251))
+
+	pygame.draw.rect(win, (18, 21, 12), (18, 288, 604, 49))
+	pygame.draw.rect(win, (86, 91, 48), (18, 288, 604, 49), 1)
+	win.blit(section_font.render("MATCH-DAY TIP", 1, MENU_AMBER), (30, 296))
+	tip = body_font.render("Weather changes the pace of play. Fast sim speed is best for quick results.", 1, RETRO_WHITE)
+	win.blit(tip, (30, 316))
+
+	back_rect = (110, 351, 200, 38)
+	back_hover = back_rect[0] + back_rect[2] > mx > back_rect[0] and back_rect[1] + back_rect[3] > my > back_rect[1]
+	_draw_menu_button(win, back_rect,
+	                  MENU_OLIVE_HOVER if back_hover else MENU_OLIVE, MENU_BORDER)
+	back_label = myfont_menu_btn.render("< Back to Menu", 1,
+	                                    MENU_AMBER_BRIGHT if back_hover else MENU_AMBER)
+	win.blit(back_label, (back_rect[0] + (back_rect[2] - back_label.get_width()) // 2,
+	                      back_rect[1] + (back_rect[3] - back_label.get_height()) // 2))
+
+	if back_hover and click[0] == 1:
+		instructions = False
+		on_main_menu = True
+		pygame.time.delay(200)
+
+	next_rect = (330, 351, 200, 38)
+	next_hover = next_rect[0] + next_rect[2] > mx > next_rect[0] and next_rect[1] + next_rect[3] > my > next_rect[1]
+	_draw_menu_button(win, next_rect,
+	                  MENU_OLIVE_HOVER if next_hover else MENU_OLIVE, MENU_BORDER)
+	next_label = myfont_menu_btn.render("Stat Guide  >", 1,
+	                                    MENU_AMBER_BRIGHT if next_hover else MENU_AMBER)
+	win.blit(next_label, (next_rect[0] + (next_rect[2] - next_label.get_width()) // 2,
+	                      next_rect[1] + (next_rect[3] - next_label.get_height()) // 2))
+	if next_hover and click[0] == 1:
+		instructions_page = 2
+		pygame.time.delay(200)
+
+	for event in pygame.event.get():
+		if event.type == pygame.QUIT:
+			run = False
+		if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_RETURN):
+			instructions = False
+			on_main_menu = True
+
+	pygame.display.update()
+
+
+def open_stats_guide():
+	"""Draw page two of the guide: match stats and player skill allocations."""
+	global on_main_menu, instructions, instructions_page, run
+
+	win.blit(start_bg, (0, 0))
+	panel = pygame.Surface((ScreenWidth, ScreenHeight), pygame.SRCALPHA)
+	panel.fill((8, 10, 5, 232))
+	win.blit(panel, (0, 0))
+	mx, my = mouse
+
+	title_font = pygame.font.SysFont("Verdana", 27, bold=True)
+	heading_font = pygame.font.SysFont("Verdana", 12, bold=True)
+	text_font = pygame.font.SysFont("Consolas", 10)
+	text_bold = pygame.font.SysFont("Consolas", 10, bold=True)
+
+	win.blit(title_font.render("STATS & PLAYER SKILLS", 1, MENU_AMBER), (18, 9))
+	win.blit(myfont_menu_tag.render("The numbers behind every performance", 1, MENU_TAGLINE), (20, 42))
+	pygame.draw.line(win, MENU_BORDER, (18, 60), (622, 60), 2)
+
+	def _glossary_card(x, y, w, h, heading, entries):
+		pygame.draw.rect(win, (19, 22, 12), (x, y, w, h))
+		pygame.draw.rect(win, (86, 91, 48), (x, y, w, h), 1)
+		pygame.draw.rect(win, MENU_OLIVE, (x, y, w, 23))
+		pygame.draw.rect(win, MENU_BORDER, (x, y, w, 23), 1)
+		win.blit(heading_font.render(heading, 1, MENU_AMBER_BRIGHT), (x + 8, y + 4))
+		for i, (abbr, meaning) in enumerate(entries):
+			ty = y + 29 + i * 14
+			win.blit(text_bold.render(abbr, 1, MENU_AMBER), (x + 8, ty))
+			win.blit(text_font.render(meaning, 1, RETRO_WHITE), (x + 39, ty))
+
+	basic_stats = [
+		("HO", "Hitouts"), ("K", "Kicks"), ("M", "Marks"),
+		("HB", "Handballs"), ("T", "Tackles"), ("FF", "Free kicks for"),
+		("FA", "Free kicks against"), ("G", "Goals (6 points)"),
+		("B", "Behinds (1 point)"), ("D", "Disposals (K + HB)"),
+		("DT", "Fantasy score*"),
+	]
+	advanced_one = [
+		("SI", "Score involvements"), ("INT", "Intercepts"),
+		("TO", "Turnovers"), ("CW", "Contest wins"),
+		("CL", "Contest losses"), ("R50", "Rebound 50s"),
+		("I50", "Inside 50s"), ("BNC", "Running bounces"),
+	]
+	advanced_two = [
+		("CP", "Contested possessions"), ("UP", "Uncontested possessions"),
+		("CM", "Contested marks"), ("UM", "Uncontested marks"),
+		("T50", "Tackles inside 50"), ("SPO", "Spoils"),
+		("SMO", "Smothers"),
+	]
+	_glossary_card(18, 70, 194, 187, "BASIC MATCH STATS", basic_stats)
+	_glossary_card(223, 70, 194, 187, "ADVANCED STATS  A-M", advanced_one)
+	_glossary_card(428, 70, 194, 187, "ADVANCED STATS  N-Z", advanced_two)
+
+	# Skill allocation card. The descriptions mirror player_attributes.py and
+	# the contest pairings used by the simulation engine.
+	pygame.draw.rect(win, (27, 28, 13), (18, 266, 604, 84))
+	pygame.draw.rect(win, MENU_BORDER, (18, 266, 604, 84), 1)
+	win.blit(heading_font.render("PLAYER SKILL ALLOCATION", 1, MENU_AMBER_BRIGHT), (28, 273))
+	win.blit(text_font.render("Spend up to 100 points across 7 skills (no negatives). Default: 15 each + 10 Aura.", 1, RETRO_WHITE), (28, 291))
+
+	left_skills = "STR  physical contests/rucks   SPD  separation/runs   AGI  evade & break pressure"
+	right_skills = "SKL  disposal/goal accuracy   END  fatigue/subs   PRS  tackles/smothers   AUR  clutch play"
+	win.blit(text_font.render(left_skills, 1, MENU_TAGLINE), (28, 308))
+	win.blit(text_font.render(right_skills, 1, MENU_TAGLINE), (28, 323))
+	win.blit(text_font.render("Contest odds compare players and stay within 30-70%. Skill success ranges 50-65%.", 1, MENU_AMBER), (28, 338))
+
+	# DT scoring note sits under its glossary column without crowding definitions.
+	dt_note = text_font.render("* DT: K 3, HB 2, M 3, T 4, FF 1, FA -3, G 6, B 1", 1, (170, 165, 125))
+	win.blit(dt_note, (224, 248))
+
+	guide_rect = (110, 358, 200, 34)
+	menu_rect = (330, 358, 200, 34)
+	guide_hover = guide_rect[0] + guide_rect[2] > mx > guide_rect[0] and guide_rect[1] + guide_rect[3] > my > guide_rect[1]
+	menu_hover = menu_rect[0] + menu_rect[2] > mx > menu_rect[0] and menu_rect[1] + menu_rect[3] > my > menu_rect[1]
+	_draw_menu_button(win, guide_rect, MENU_OLIVE_HOVER if guide_hover else MENU_OLIVE, MENU_BORDER)
+	_draw_menu_button(win, menu_rect, MENU_OLIVE_HOVER if menu_hover else MENU_OLIVE, MENU_BORDER)
+	guide_label = myfont_menu_btn.render("< Game Guide", 1, MENU_AMBER_BRIGHT if guide_hover else MENU_AMBER)
+	menu_label = myfont_menu_btn.render("Main Menu", 1, MENU_AMBER_BRIGHT if menu_hover else MENU_AMBER)
+	win.blit(guide_label, (guide_rect[0] + (guide_rect[2] - guide_label.get_width()) // 2,
+	                       guide_rect[1] + (guide_rect[3] - guide_label.get_height()) // 2))
+	win.blit(menu_label, (menu_rect[0] + (menu_rect[2] - menu_label.get_width()) // 2,
+	                      menu_rect[1] + (menu_rect[3] - menu_label.get_height()) // 2))
+
+	if guide_hover and click[0] == 1:
+		instructions_page = 1
+		pygame.time.delay(200)
+	if menu_hover and click[0] == 1:
+		instructions_page = 1
+		instructions = False
+		on_main_menu = True
+		pygame.time.delay(200)
+
+	for event in pygame.event.get():
+		if event.type == pygame.QUIT:
+			run = False
+		if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+			instructions_page = 1
+
 	pygame.display.update()
 
 def ShowPostMatchScreen():
@@ -254,8 +498,7 @@ def ShowPostMatchScreen():
 	_PM_COLS   = ["HO", "K", "M", "HB", "T", "FF", "FA", "G", "B", "D", "DT"]
 	_COL_W     = 22   # pixels per stat column (11 cols — slightly tighter)
 	_NAME_W    = 56   # pixels for player name column
-	_ROW_H     = 15   # row height in pixels
-	_MAX_ROWS  = 16   # max players shown per team
+	_ROW_H     = 12   # compact enough to show the complete 20-player roster
 
 	# ── Background: Couch Footy photo + dark frosted overlay ─────────────────
 	win.blit(start_bg, (0, 0))
@@ -285,7 +528,8 @@ def ShowPostMatchScreen():
 	# ── Header card: final score ──────────────────────────────────────────────
 	_card((4, 4, 632, 52), (30, 28, 10), MENU_BORDER, 2)
 	# title line
-	title_lbl = myfont_badge.render("POST-MATCH REPORT", 1, MENU_AMBER)
+	report_title_font = pygame.font.SysFont("Consolas", 9, bold=True)
+	title_lbl = report_title_font.render("POST-MATCH REPORT", 1, MENU_AMBER)
 	win.blit(title_lbl, ((ScreenWidth - title_lbl.get_width()) // 2, 8))
 	# score line
 	home_total = f"{state.home.name}  {hg}.{hb} ({ht})"
@@ -293,10 +537,18 @@ def ShowPostMatchScreen():
 	sep        = "  def.  " if ht >= at_ else "  lost to  "
 	winner_col = RETRO_GOLD
 	loser_col  = (180, 175, 155)
-	score_lbl_h = myfont_score_num.render(home_total, 1, winner_col if ht >= at_ else loser_col)
-	score_lbl_s = myfont_score_num.render(sep, 1, RETRO_WHITE)
-	score_lbl_a = myfont_score_num.render(away_total, 1, winner_col if at_ > ht else loser_col)
-	total_w = score_lbl_h.get_width() + score_lbl_s.get_width() + score_lbl_a.get_width()
+	# Long team names can make the result headline wider than the 640px canvas.
+	# Start smaller than the in-game score font and shrink only as far as needed.
+	result_font_size = 16
+	while True:
+		result_font = pygame.font.SysFont("Consolas", result_font_size, bold=True)
+		score_lbl_h = result_font.render(home_total, 1, winner_col if ht >= at_ else loser_col)
+		score_lbl_s = result_font.render(sep, 1, RETRO_WHITE)
+		score_lbl_a = result_font.render(away_total, 1, winner_col if at_ > ht else loser_col)
+		total_w = score_lbl_h.get_width() + score_lbl_s.get_width() + score_lbl_a.get_width()
+		if total_w <= ScreenWidth - 16 or result_font_size == 9:
+			break
+		result_font_size -= 1
 	sx = (ScreenWidth - total_w) // 2
 	sy = 26
 	win.blit(score_lbl_h, (sx, sy))
@@ -331,7 +583,7 @@ def ShowPostMatchScreen():
 	# player rows
 	row_y = CARD_Y + 35
 	ROW_FILL_ALT = (20, 30, 55)
-	for i, pos in enumerate(list(state.home.pos_index)[:_MAX_ROWS]):
+	for i, pos in enumerate(state.home.pos_index):
 		p_name = state.home.pos_players[pos]
 		if i % 2 == 1:
 			pygame.draw.rect(win, ROW_FILL_ALT, (HOME_X + 2, row_y - 1, CARD_W - 4, _ROW_H))
@@ -341,8 +593,7 @@ def ShowPostMatchScreen():
 		pstats = state.home.stats.get(p_name, {})
 		for col in _PM_COLS:
 			val = pstats.get(col, 0)
-			col_col = RETRO_GOLD if col in ("G", "FA", "DT") else RETRO_WHITE
-			v_lbl = myfont_badge.render(str(val), 1, col_col)
+			v_lbl = myfont_badge.render(str(val), 1, RETRO_WHITE)
 			win.blit(v_lbl, (cx, row_y))
 			cx += _COL_W
 		row_y += _ROW_H
@@ -366,7 +617,7 @@ def ShowPostMatchScreen():
 	# player rows
 	row_y = CARD_Y + 35
 	ROW_FILL_ALT_A = (55, 18, 18)
-	for i, pos in enumerate(list(state.away.pos_index)[:_MAX_ROWS]):
+	for i, pos in enumerate(state.away.pos_index):
 		p_name = state.away.pos_players[pos]
 		if i % 2 == 1:
 			pygame.draw.rect(win, ROW_FILL_ALT_A, (AWAY_X + 2, row_y - 1, CARD_W - 4, _ROW_H))
@@ -376,8 +627,7 @@ def ShowPostMatchScreen():
 		pstats = state.away.stats.get(p_name, {})
 		for col in _PM_COLS:
 			val = pstats.get(col, 0)
-			col_col = RETRO_GOLD if col in ("G", "FA", "DT") else RETRO_WHITE
-			v_lbl = myfont_badge.render(str(val), 1, col_col)
+			v_lbl = myfont_badge.render(str(val), 1, RETRO_WHITE)
 			win.blit(v_lbl, (cx, row_y))
 			cx += _COL_W
 		row_y += _ROW_H
@@ -590,7 +840,7 @@ class Player(object):
 		_agent_log("engine.Player.Initiate", "enter", {}, "H2")
 		# endregion
 		try:
-			r = load_roster()
+			r = selected_roster if selected_roster is not None else load_roster()
 			state.scoreboard_log = []
 			state.load_from_roster(r)
 			
@@ -986,7 +1236,7 @@ class Player(object):
 			state.current_oppo = state.home.pos_players[OppoLookup]
 		
 
-	def updatePlayerStats(teamWithBall, action, playerWithBall):
+	def updatePlayerStats(teamWithBall, action, playerWithBall, opponent=None):
 		# teamWithBall is often misleading (e.g. defending player makes tackle)
 		# So we dynamically locate the player's team dictionary.
 		if playerWithBall in state.home.stats:
@@ -997,6 +1247,7 @@ class Player(object):
 			player_stats = state.away.stats[playerWithBall]
 		else:
 			return
+		stat_opponent = state.current_oppo if opponent is None else opponent
 
 		stat_key = None
 		dt_pts = 0
@@ -1036,22 +1287,22 @@ class Player(object):
 
 		# Special handling for Free Kick / Free Against to credit the opponent
 		oppo_stats_dict = None
-		if state.current_oppo:
+		if stat_opponent:
 			if player_team == "Home":
 				oppo_stats_dict = state.away.stats
 			else:
 				oppo_stats_dict = state.home.stats
 
 		if action in ("Free Kick", "Free Against"):
-			if oppo_stats_dict and state.current_oppo in oppo_stats_dict:
+			if oppo_stats_dict and stat_opponent in oppo_stats_dict:
 				if action == "Free Kick":
 					# Player gets FF, Opponent gets FA
-					oppo_stats_dict[state.current_oppo]['FA'] += 1
-					oppo_stats_dict[state.current_oppo]['DT'] -= 3
+					oppo_stats_dict[stat_opponent]['FA'] += 1
+					oppo_stats_dict[stat_opponent]['DT'] -= 3
 				else:
 					# Player gets FA, Opponent gets FF
-					oppo_stats_dict[state.current_oppo]['FF'] += 1
-					oppo_stats_dict[state.current_oppo]['DT'] += 1
+					oppo_stats_dict[stat_opponent]['FF'] += 1
+					oppo_stats_dict[stat_opponent]['DT'] += 1
 
 		# ==========================================
 		# ADVANCED STATS TRACKING
@@ -1134,9 +1385,9 @@ class Player(object):
 			if playerWithBall not in state.current_chain:
 				state.current_chain.append(playerWithBall)
 			if action == "BallGet" or (action == "Mark" and state.comm_type == "Contested Mark Taken"):
-				if oppo_stats_dict and state.current_oppo in oppo_stats_dict:
+				if oppo_stats_dict and stat_opponent in oppo_stats_dict:
 					player_stats['CW'] += 1
-					oppo_stats_dict[state.current_oppo]['CL'] += 1
+					oppo_stats_dict[stat_opponent]['CL'] += 1
 
 		# 2. Free Kicks
 		elif action == "Free Kick":
@@ -1149,18 +1400,18 @@ class Player(object):
 				apply_turnover_to_chain()
 				state.current_chain = [playerWithBall]
 				player_stats['INT'] += 1
-				if oppo_stats_dict and state.current_oppo in oppo_stats_dict:
+				if oppo_stats_dict and stat_opponent in oppo_stats_dict:
 					player_stats['CW'] += 1
-					oppo_stats_dict[state.current_oppo]['CL'] += 1
+					oppo_stats_dict[stat_opponent]['CL'] += 1
 
 		elif action == "Free Against":
 			# Player gave away a free: turnover
 			apply_turnover_to_chain()
-			if state.current_oppo and oppo_stats_dict:
-				state.current_chain = [state.current_oppo]
-				if state.current_oppo in oppo_stats_dict:
-					oppo_stats_dict[state.current_oppo]['CW'] += 1
-					oppo_stats_dict[state.current_oppo]['INT'] += 1
+			if stat_opponent and oppo_stats_dict:
+				state.current_chain = [stat_opponent]
+				if stat_opponent in oppo_stats_dict:
+					oppo_stats_dict[stat_opponent]['CW'] += 1
+					oppo_stats_dict[stat_opponent]['INT'] += 1
 					player_stats['CL'] += 1
 			else:
 				state.current_chain = []
@@ -1170,9 +1421,9 @@ class Player(object):
 			apply_turnover_to_chain()
 			
 			if action in ("Tackle", "Spoil", "Dispossession"):
-				if oppo_stats_dict and state.current_oppo in oppo_stats_dict:
+				if oppo_stats_dict and stat_opponent in oppo_stats_dict:
 					player_stats['CW'] += 1
-					oppo_stats_dict[state.current_oppo]['CL'] += 1
+					oppo_stats_dict[stat_opponent]['CL'] += 1
 				if action == "Tackle":
 					state.current_chain = [playerWithBall]
 				else:
@@ -1566,16 +1817,19 @@ class sim_game(object):
 	def PlayBook(play_type, movement, Max_lateralDist, sideways):
 		# Save previous line position for I50/R50 tracking
 		state.last_play_pos_line = state.play_pos_line
+		Dir_lateral = random.randint(-1,1)
+		# A kick must leave the kicker's coordinate; otherwise the receiving
+		# lookup can select the kicker as the mark target.
+		if sideways == "sideways" and "Kick" in play_type and Max_lateralDist:
+			Dir_lateral = random.choice((-1, 1))
 		if state.possession == "Home":
 			state.play_pos_line += movement
-			Dir_lateral = random.randint(-1,1)
 			if sideways == "sideways":
 				state.play_pos_col += Dir_lateral * Max_lateralDist
 			else:
 				state.play_pos_col += Dir_lateral * random.randint(0, Max_lateralDist)
 		elif state.possession == "Away":
 			state.play_pos_line -= movement
-			Dir_lateral = random.randint(-1,1)
 			if sideways == "sideways":
 				state.play_pos_col += Dir_lateral * Max_lateralDist
 			else:
@@ -1724,23 +1978,32 @@ class sim_game(object):
 		BestOnGround.TrackForm(state.current_player, state.current_oppo)
 	
 	def Generate_Play_defender():
+		contest_carrier = state.current_player
+		contest_defender = state.current_oppo
 		if state.possession in ["Home", "Away"]:
 			oppo_possession = "Away" if state.possession == "Home" else "Home"
 			
-			if state.possession == "Home":
-				ruck_player = state.home.pos_players['h_RUCK']
-				ruck_oppo = state.away.pos_players['a_RUCK']
-			else:
-				ruck_player = state.away.pos_players['a_RUCK']
-				ruck_oppo = state.home.pos_players['h_RUCK']
-
 			if state.action_type == "EffectiveKick":
 				state.action_type = "Mark"
 				state.trans_type = "Carrying"
 				if state.current_player == state.prev_player:
-					state.current_player = ruck_player
-					state.current_oppo = ruck_oppo
-				state.comm_type = "Uncontested Mark Taken"
+					receiving_team = state.home if state.possession == "Home" else state.away
+					opposing_team = state.away if state.possession == "Home" else state.home
+					receiver = receiving_team.nearest_on_field_player(
+						(state.play_pos_col, state.play_pos_line),
+						{state.prev_player},
+					)
+					if receiver is None:
+						state.action_type = "BallGet"
+						state.trans_type = "Defending"
+						state.comm_type = "No Mark"
+					else:
+						receiver_pos, state.current_player = receiver
+						opponent_pos = receiving_team.opponent_pos(receiver_pos)
+						state.current_oppo = opposing_team.player_at(opponent_pos)
+						state.comm_type = "Uncontested Mark Taken"
+				else:
+					state.comm_type = "Uncontested Mark Taken"
 			else:
 				if state.congestion_limiter < 2:
 					p_stats = state.get_effective_stats(state.current_player, state.current_oppo)
@@ -1797,10 +2060,28 @@ class sim_game(object):
 			state.trans_type = "Contest"
 			state.comm_type = "Ball Up For Grabs"
 		
-		Player.updatePlayerStats(state.possession, state.action_type, state.current_player)
+		# A defensive pressure outcome belongs to the opponent who applied the
+		# pressure, not the original ball carrier. Preserve that matchup even
+		# though the positional players are refreshed above for the next play.
+		if state.action_type in ("Tackle", "Dispossession", "Free Against") and contest_defender:
+			state.current_player = contest_carrier
+			state.current_oppo = contest_defender
+			Player.updatePlayerStats(
+				state.possession,
+				state.action_type,
+				contest_defender,
+				contest_carrier,
+			)
+		else:
+			Player.updatePlayerStats(state.possession, state.action_type, state.current_player)
 
 	def Generate_Play_ballCarrier():
 		#state.speed = 7
+		# A disposal updates the ball coordinates before its outcome is resolved.
+		# Keep the starting position so a smother cannot carry the ball over the
+		# scoring line and be awarded as a goal on the same play.
+		pre_disposal_line = state.play_pos_line
+		pre_disposal_col = state.play_pos_col
 		
 		if state.action_type == "Out on the Full" or state.action_type == "Behind":
 			if state.play_pos_line == 2:
@@ -1908,6 +2189,8 @@ class sim_game(object):
 				state.comm_type = "Smothered"
 				state.action_type = "Lose Ball"
 				state.trans_type = "Defending"
+				state.play_pos_line = pre_disposal_line
+				state.play_pos_col = pre_disposal_col
 
 		Player.updatePlayerStats(state.possession, state.action_type, state.current_player)
 		BestOnGround.TrackForm(state.current_player, state.current_oppo)
@@ -2220,7 +2503,7 @@ class sim_game(object):
 			textcommentary.write(PrintCommentary + '\n')
 	
 	def Comm_MatchStart():
-		First = "MATCH COMMENCING SHORTLY ... " + state.home.name + " vs " + state.away.name + '\n'
+		First = "Match commencing shortly ... " + state.home.name + " v " + state.away.name + '\n'
 		if match_settings.competition_mode:
 			s = match_settings.season_number
 			rd = match_settings.round_number
@@ -2229,70 +2512,7 @@ class sim_game(object):
 			First += f"COMPETITION MODE ACTIVE - MATCH ID: {m_id} ({s}, {rd})\n"
 			First += f"ROSTER FINGERPRINT: {rf}\n"
 		First += '\n'
-		h = state.home
-		a = state.away
-		DisplayMatchUps = "[code=rich]" + "                       " + a.name + '\n' + \
-			"FB: " + a.pos_players["a_rBP"] + "|" + \
-			a.pos_players["a_FB"] +"|" + a.pos_players["a_lBP"] + '\n' + \
-			"FF: " + h.pos_players["h_lFP"] +"|" + h.pos_players["h_FF"] +"|" + \
-			h.pos_players["h_rFP"] + '\n' + "HB: " + \
-			a.pos_players["a_rHBF"] +"|" + a.pos_players["a_CHB"] +"|" + \
-			a.pos_players["a_lHBF"] + '\n' + "HF: " + \
-			h.pos_players["h_lHFF"] +"|" + h.pos_players["h_CHF"] +"|" + \
-			h.pos_players["h_rHFF"] + '\n' + "C: " + \
-			a.pos_players["a_rW"] +"|" + a.pos_players["a_C"] +"|" + \
-			a.pos_players["a_lW"] + '\n' + "C: " + \
-			h.pos_players["h_lW"] +"|" + h.pos_players["h_C"] +"|" + \
-			h.pos_players["h_rW"] + '\n' + "HF: " + \
-			a.pos_players["a_rHFF"] +"|" + a.pos_players["a_CHF"] +"|" + \
-			a.pos_players["a_lHFF"] + '\n' + "HB: " + \
-			h.pos_players["h_lHBF"] +"|" + h.pos_players["h_CHB"] +"|" + \
-		 	h.pos_players["h_rHBF"] + '\n' + "FF: " + \
-			a.pos_players["a_rFP"] +"|" + a.pos_players["a_FF"] +"|" + \
-			a.pos_players["a_lFP"] + '\n' + "FB: " + \
-			h.pos_players["h_lBP"] +"|" + h.pos_players["h_FB"] +"|" + \
-			h.pos_players["h_rBP"] + '\n' + "                       " + \
-			h.name + '\n' + '\n' + "[/code]" + \
-			h.name + " FOLL: " + h.pos_players["h_RUCK"] +"|" + \
-			h.pos_players["h_RR"] +"|" + h.pos_players["h_R"] + '\n' + \
-			a.name + " FOLL: " + a.pos_players["a_RUCK"] +"|" + \
-			a.pos_players["a_RR"] +"|" + a.pos_players["a_R"] + '\n' + \
-			'\n' + h.name + " INT: " + \
-			h.pos_players["h_INT1"] +"|" + h.pos_players["h_INT2"] + '\n' + \
-			a.name + " INT: " + a.pos_players["a_INT1"] +"|" + \
-			a.pos_players["a_INT2"]
-		'''
-		DisplayMatchUps = "[TABLE][TR][TD][/TD][TD][/TD][TD]" + a.name + "[/TD][TD][/TD][/TR]" + '\n' + \
-			"[TR][TD]FB:[/TD]" + "[TD]" + a.pos_players["a_rBP"] + "[/TD]" + "[TD]" + \
-			a.pos_players["a_FB"] + "[/TD][TD]" + a.pos_players["a_lBP"] + "[/TD][/TR]" + '\n' + \
-			"[TR][TD]FF:[/TD][TD]" + h.pos_players["h_lFP"] + "[/TD][TD]" + h.pos_players["h_FF"] + \
-			"[/TD][TD]" + h.pos_players["h_rFP"] + "[/TD][/TR]" + '\n' + "[TR][TD]HB:[/TD][TD]" + \
-			a.pos_players["a_rHBF"] + "[/TD][TD]" + a.pos_players["a_CHB"] + "[/TD][TD]" + \
-			a.pos_players["a_lHBF"] + "[/TD][/TR]" + '\n' + "[TR][TD]HF:[/TD][TD]" + \
-			h.pos_players["h_lHFF"] + "[/TD][TD]" + h.pos_players["h_CHF"] + "[/TD][TD]" + \
-			h.pos_players["h_rHFF"] + "[/TD][/TR]" + '\n' + "[TR][TD]C:[/TD][TD]" + \
-			a.pos_players["a_rW"] + "[/TD][TD]" + a.pos_players["a_C"] + "[/TD][TD]" + \
-			a.pos_players["a_lW"] + "[/TD][/TR]" + '\n' + "[TR][TD]C:[/TD][TD]" + \
-			h.pos_players["h_lW"] + "[/TD][TD]" + h.pos_players["h_C"] + "[/TD][TD]" + \
-			h.pos_players["h_rW"] + "[/TD][/TR]" + '\n' + "[TR][TD]HF:[/TD][TD]" + \
-			a.pos_players["a_rHFF"] + "[/TD][TD]" + a.pos_players["a_CHF"] + "[/TD][TD]" + \
-			a.pos_players["a_lHFF"] + "[/TD][/TR]" + '\n' + "[TR][TD]HB:[/TD][TD]" + \
-			h.pos_players["h_lHBF"] + "[/TD][TD]" + h.pos_players["h_CHB"] + "[/TD][TD]" + \
-		 	h.pos_players["h_rHBF"] + "[/TD][/TR]" + '\n' + "[TR][TD]FF:[/TD][TD]" + \
-			a.pos_players["a_rFP"] + "[/TD][TD]" + a.pos_players["a_FF"] + "[/TD][TD]" + \
-			a.pos_players["a_lFP"] + "[/TD][/TR]" + '\n' + "[TR][TD]FB:[/TD][TD]" + \
-			h.pos_players["h_lBP"] + "[/TD][TD]" + h.pos_players["h_FB"] + "[/TD][TD]" + \
-			h.pos_players["h_rBP"] + "[/TD][/TR]" + '\n' + "[TR][TD][/TD][TD][/TD]" + \
-			"[TD]" + h.name + "[/TD][TD][/TD][/TR]" + '\n' + "[TR][TD][/TD][TD][/TD][TD][/TD][TD][/TD][/TR]" + '\n' + \
-			"[TR][TD]" + h.name + " FOLL :[/TD][TD]" + h.pos_players["h_RUCK"] + "[/TD][TD]" + \
-			h.pos_players["h_RR"] + "[/TD][TD]" + h.pos_players["h_R"] + "[/TD][/TR]" + '\n' + \
-			"[TR][TD]" + a.name + " FOLL :[/TD][TD]" + a.pos_players["a_RUCK"] + "[/TD][TD]" + \
-			a.pos_players["a_RR"] + "[/TD][TD]" + a.pos_players["a_R"] + "[/TD][/TR]" + '\n' + \
-			"[TR][TD][/TD][TD][/TD][TD][/TD][TD][/TD][/TR]" + '\n' + "[TR][TD]" + h.name + " INT :[/TD][TD]" + \
-			h.pos_players["h_INT1"] + "[/TD][TD]" + h.pos_players["h_INT2"] + "[/TD][TD][/TD][/TR]" + '\n' + \
-			"[TR][TD]" + a.name + " INT :[/TD][TD]" + a.pos_players["a_INT1"] + "[/TD][TD]" + \
-			a.pos_players["a_INT2"] + "[/TD][TD][/TD][/TR]" + '\n' + "[/TABLE]"
-		'''
+		DisplayMatchUps = format_team_lineup(state)
 		filepath = get_output_path("Commentary.txt")
 		# Unprotect file if it was previously sealed
 		if os.path.exists(filepath):
@@ -2329,13 +2549,16 @@ class sim_game(object):
 		sim_game.GetRunSpeed()
 		try:
 			Player.Initiate()
-		except DuplicatePlayerNameError as exc:
+		except (DuplicatePlayerNameError, SkillAllocationError) as exc:
 			global playing_match, on_main_menu, post_match
 			state.sim_running = False
 			playing_match = False
 			post_match = False
 			on_main_menu = True
-			show_roster_error(str(exc))
+			if isinstance(exc, SkillAllocationError):
+				show_skill_allocation_error(str(exc))
+			else:
+				show_roster_error(str(exc))
 			return
 		# region agent log
 		_agent_log("engine.match_sim_running", "after_initiate", {"QTR": state.qtr}, "H3")
@@ -2507,14 +2730,105 @@ def show_roster_error(message: str) -> None:
 		clock.tick(30)
 
 
+def show_skill_allocation_error(message: str) -> None:
+	"""Show a branded, actionable error when a player breaks skill-budget rules."""
+	global run, on_main_menu, instructions, instructions_page
+	title_font = pygame.font.SysFont("Verdana", 28, bold=True)
+	heading_font = pygame.font.SysFont("Verdana", 14, bold=True)
+	body_font = pygame.font.SysFont("Consolas", 13)
+	small_font = pygame.font.SysFont("Consolas", 11)
+
+	# Wrap the player-specific validation message to fit its highlighted card.
+	words = " ".join(message.split()).split(" ")
+	message_lines, line = [], ""
+	for word in words:
+		candidate = f"{line} {word}".strip()
+		if body_font.size(candidate)[0] > 540 and line:
+			message_lines.append(line)
+			line = word
+		else:
+			line = candidate
+	if line:
+		message_lines.append(line)
+
+	while run:
+		win.blit(start_bg, (0, 0))
+		overlay = pygame.Surface((ScreenWidth, ScreenHeight), pygame.SRCALPHA)
+		overlay.fill((8, 10, 5, 230))
+		win.blit(overlay, (0, 0))
+
+		# Header and warning badge use the same match-day palette as the guides.
+		pygame.draw.circle(win, (190, 62, 42), (39, 39), 21)
+		pygame.draw.circle(win, (255, 145, 90), (39, 39), 21, 2)
+		bang = title_font.render("!", 1, RETRO_WHITE)
+		win.blit(bang, (39 - bang.get_width() // 2, 39 - bang.get_height() // 2))
+		win.blit(title_font.render("CHECK PLAYER SKILLS", 1, MENU_AMBER), (73, 18))
+		win.blit(myfont_menu_tag.render("The match cannot start until this roster entry is fixed.", 1, MENU_TAGLINE), (75, 51))
+		pygame.draw.line(win, MENU_BORDER, (18, 74), (622, 74), 2)
+
+		pygame.draw.rect(win, (53, 20, 16), (28, 89, 584, 82))
+		pygame.draw.rect(win, (210, 82, 55), (28, 89, 584, 82), 2)
+		win.blit(heading_font.render("WHAT NEEDS ATTENTION", 1, (255, 174, 120)), (43, 101))
+		for i, text in enumerate(message_lines[:2]):
+			win.blit(body_font.render(text, 1, RETRO_WHITE), (43, 127 + i * 19))
+
+		pygame.draw.rect(win, (20, 23, 13), (28, 184, 584, 105))
+		pygame.draw.rect(win, (86, 91, 48), (28, 184, 584, 105), 1)
+		win.blit(heading_font.render("SKILL ALLOCATION RULES", 1, MENU_AMBER_BRIGHT), (43, 196))
+		rules = [
+			"• Use zero or positive whole numbers for every skill.",
+			"• STR + SPD + AGI + SKL + END + PRS + AUR must total 100 or less.",
+			"• Blank skill cells use the default allocation: 15 each, plus 10 Aura.",
+		]
+		for i, rule in enumerate(rules):
+			win.blit(small_font.render(rule, 1, RETRO_WHITE), (43, 221 + i * 20))
+
+		win.blit(small_font.render("Edit TeamSelection.csv, save it, then choose Play Footy again.", 1, MENU_TAGLINE), (43, 305))
+
+		mx, my = pygame.mouse.get_pos()
+		back_rect = (95, 337, 210, 42)
+		guide_rect = (335, 337, 210, 42)
+		back_hover = back_rect[0] + back_rect[2] > mx > back_rect[0] and back_rect[1] + back_rect[3] > my > back_rect[1]
+		guide_hover = guide_rect[0] + guide_rect[2] > mx > guide_rect[0] and guide_rect[1] + guide_rect[3] > my > guide_rect[1]
+		_draw_menu_button(win, back_rect, MENU_OLIVE_HOVER if back_hover else MENU_OLIVE, MENU_BORDER)
+		_draw_menu_button(win, guide_rect, MENU_OLIVE_HOVER if guide_hover else MENU_OLIVE, MENU_BORDER)
+		back_label = myfont_menu_btn.render("< Back to Menu", 1, MENU_AMBER_BRIGHT if back_hover else MENU_AMBER)
+		guide_label = myfont_menu_btn.render("View Skill Guide >", 1, MENU_AMBER_BRIGHT if guide_hover else MENU_AMBER)
+		win.blit(back_label, (back_rect[0] + (back_rect[2] - back_label.get_width()) // 2,
+		                      back_rect[1] + (back_rect[3] - back_label.get_height()) // 2))
+		win.blit(guide_label, (guide_rect[0] + (guide_rect[2] - guide_label.get_width()) // 2,
+		                       guide_rect[1] + (guide_rect[3] - guide_label.get_height()) // 2))
+		pygame.display.update()
+
+		for event in pygame.event.get():
+			if event.type == pygame.QUIT:
+				run = False
+				return
+			if event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_ESCAPE):
+				on_main_menu = True
+				return
+			if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+				if back_hover:
+					on_main_menu = True
+					return
+				if guide_hover:
+					on_main_menu = False
+					instructions = True
+					instructions_page = 2
+					return
+		clock.tick(30)
+
+
 def main() -> None:
 	"""Main pygame loop: menu, match simulation, post-match stats, and settings."""
 	# mouse/click must be module-level: UI helpers read them without receiving arguments.
-	global run, on_main_menu, playing_match, settings, post_match, mouse, click
+	global run, on_main_menu, playing_match, settings, instructions, instructions_page, post_match, mouse, click
 	run = True
 	on_main_menu = True
 	playing_match = False
 	settings = False
+	instructions = False
+	instructions_page = 1
 	post_match = False
 
 	while run:
@@ -2536,6 +2850,9 @@ def main() -> None:
 
 		elif settings:
 			open_settings()
+
+		elif instructions:
+			open_instructions()
 
 		for event in pygame.event.get():
 			if event.type == pygame.QUIT:
