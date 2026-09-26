@@ -3,9 +3,9 @@ __pycache__/
 .venv/
 .build-venv/
 outputs/
+saved_teams/
 build/
 dist/
 *.spec
 .tmp/
 release/
-saved_teams/

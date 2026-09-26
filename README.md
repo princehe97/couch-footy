@@ -8,7 +8,7 @@ Download `CouchFooty.exe`, place it in its own writable folder, and double-click
 it. On first launch it creates an editable `TeamSelection.csv` beside the
 executable. Match reports are written to an `outputs` folder in the same place.
 
-## First run
+## Run from source
 
 1. Install Python 3.11 or newer from <https://www.python.org/downloads/>.
 2. Open a terminal in this folder.
@@ -50,8 +50,8 @@ allocations. Each player has at most 100 points; reduce an allocation before
 adding points elsewhere. Choose **Swap position...**, then another player
 (on either page) to exchange positions, keeping their names and attributes together.
 Blank or duplicate player names are rejected, including differences only in case
-or surrounding spaces. You can also edit the team name. Team and player names must use ASCII characters
-(unaccented letters, numbers and standard punctuation); unsupported names show a validation error.
+or surrounding spaces. You can also edit the team name. Please remove accents (for example, Jose instead
+of José), emojis and special symbols from team and player names.
 **Save changes** updates that saved team; **Cancel** or Escape discards all edits.
 For CSV teams, **Apply changes** returns to setup, where **Save as new** stores them.
 You can still use **Reload CSV** and **Update saved...** to replace a saved roster.
@@ -65,4 +65,4 @@ match setup and can be edited there; they are not stored in team files.
 The roster preview shows strength, speed, agility, skill, endurance, pressure,
 and aura in that order. **File issues** explains any roster or saved-file errors.
 
-Run the automated storage and setup checks with `python -m unittest discover -s tests -v`.
+Run the automated checks with `python -m unittest discover -s tests -v`.

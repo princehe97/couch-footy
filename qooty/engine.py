@@ -14,7 +14,7 @@ from qooty.team_selection import _agent_log, load_roster, DuplicatePlayerNameErr
 from qooty.team_setup import TeamSetup, SetupClosed
 from qooty.match_state import MatchState
 from qooty.player_attributes import SkillAllocationError
-from qooty.reports import (write_player_stat_exports, TextCSVWriter,
+from qooty.reports import (format_team_lineup, write_player_stat_exports, TextCSVWriter,
     TextCSVDictWriter, write_dataframe_csv)
 
 state = MatchState()
@@ -524,7 +524,8 @@ def ShowPostMatchScreen():
 	# ── Header card: final score ──────────────────────────────────────────────
 	_card((4, 4, 632, 52), (30, 28, 10), MENU_BORDER, 2)
 	# title line
-	title_lbl = myfont_badge.render("POST-MATCH REPORT", 1, MENU_AMBER)
+	report_title_font = pygame.font.SysFont("Consolas", 9, bold=True)
+	title_lbl = report_title_font.render("POST-MATCH REPORT", 1, MENU_AMBER)
 	win.blit(title_lbl, ((ScreenWidth - title_lbl.get_width()) // 2, 8))
 	# score line
 	home_total = f"{state.home.name}  {hg}.{hb} ({ht})"
@@ -532,10 +533,18 @@ def ShowPostMatchScreen():
 	sep        = "  def.  " if ht >= at_ else "  lost to  "
 	winner_col = RETRO_GOLD
 	loser_col  = (180, 175, 155)
-	score_lbl_h = myfont_score_num.render(home_total, 1, winner_col if ht >= at_ else loser_col)
-	score_lbl_s = myfont_score_num.render(sep, 1, RETRO_WHITE)
-	score_lbl_a = myfont_score_num.render(away_total, 1, winner_col if at_ > ht else loser_col)
-	total_w = score_lbl_h.get_width() + score_lbl_s.get_width() + score_lbl_a.get_width()
+	# Long team names can make the result headline wider than the 640px canvas.
+	# Start smaller than the in-game score font and shrink only as far as needed.
+	result_font_size = 16
+	while True:
+		result_font = pygame.font.SysFont("Consolas", result_font_size, bold=True)
+		score_lbl_h = result_font.render(home_total, 1, winner_col if ht >= at_ else loser_col)
+		score_lbl_s = result_font.render(sep, 1, RETRO_WHITE)
+		score_lbl_a = result_font.render(away_total, 1, winner_col if at_ > ht else loser_col)
+		total_w = score_lbl_h.get_width() + score_lbl_s.get_width() + score_lbl_a.get_width()
+		if total_w <= ScreenWidth - 16 or result_font_size == 9:
+			break
+		result_font_size -= 1
 	sx = (ScreenWidth - total_w) // 2
 	sy = 26
 	win.blit(score_lbl_h, (sx, sy))
@@ -1221,7 +1230,7 @@ class Player(object):
 			state.current_oppo = state.home.pos_players[OppoLookup]
 		
 
-	def updatePlayerStats(teamWithBall, action, playerWithBall):
+	def updatePlayerStats(teamWithBall, action, playerWithBall, opponent=None):
 		# teamWithBall is often misleading (e.g. defending player makes tackle)
 		# So we dynamically locate the player's team dictionary.
 		if playerWithBall in state.home.stats:
@@ -1232,6 +1241,7 @@ class Player(object):
 			player_stats = state.away.stats[playerWithBall]
 		else:
 			return
+		stat_opponent = state.current_oppo if opponent is None else opponent
 
 		stat_key = None
 		dt_pts = 0
@@ -1271,22 +1281,22 @@ class Player(object):
 
 		# Special handling for Free Kick / Free Against to credit the opponent
 		oppo_stats_dict = None
-		if state.current_oppo:
+		if stat_opponent:
 			if player_team == "Home":
 				oppo_stats_dict = state.away.stats
 			else:
 				oppo_stats_dict = state.home.stats
 
 		if action in ("Free Kick", "Free Against"):
-			if oppo_stats_dict and state.current_oppo in oppo_stats_dict:
+			if oppo_stats_dict and stat_opponent in oppo_stats_dict:
 				if action == "Free Kick":
 					# Player gets FF, Opponent gets FA
-					oppo_stats_dict[state.current_oppo]['FA'] += 1
-					oppo_stats_dict[state.current_oppo]['DT'] -= 3
+					oppo_stats_dict[stat_opponent]['FA'] += 1
+					oppo_stats_dict[stat_opponent]['DT'] -= 3
 				else:
 					# Player gets FA, Opponent gets FF
-					oppo_stats_dict[state.current_oppo]['FF'] += 1
-					oppo_stats_dict[state.current_oppo]['DT'] += 1
+					oppo_stats_dict[stat_opponent]['FF'] += 1
+					oppo_stats_dict[stat_opponent]['DT'] += 1
 
 		# ==========================================
 		# ADVANCED STATS TRACKING
@@ -1369,9 +1379,9 @@ class Player(object):
 			if playerWithBall not in state.current_chain:
 				state.current_chain.append(playerWithBall)
 			if action == "BallGet" or (action == "Mark" and state.comm_type == "Contested Mark Taken"):
-				if oppo_stats_dict and state.current_oppo in oppo_stats_dict:
+				if oppo_stats_dict and stat_opponent in oppo_stats_dict:
 					player_stats['CW'] += 1
-					oppo_stats_dict[state.current_oppo]['CL'] += 1
+					oppo_stats_dict[stat_opponent]['CL'] += 1
 
 		# 2. Free Kicks
 		elif action == "Free Kick":
@@ -1384,18 +1394,18 @@ class Player(object):
 				apply_turnover_to_chain()
 				state.current_chain = [playerWithBall]
 				player_stats['INT'] += 1
-				if oppo_stats_dict and state.current_oppo in oppo_stats_dict:
+				if oppo_stats_dict and stat_opponent in oppo_stats_dict:
 					player_stats['CW'] += 1
-					oppo_stats_dict[state.current_oppo]['CL'] += 1
+					oppo_stats_dict[stat_opponent]['CL'] += 1
 
 		elif action == "Free Against":
 			# Player gave away a free: turnover
 			apply_turnover_to_chain()
-			if state.current_oppo and oppo_stats_dict:
-				state.current_chain = [state.current_oppo]
-				if state.current_oppo in oppo_stats_dict:
-					oppo_stats_dict[state.current_oppo]['CW'] += 1
-					oppo_stats_dict[state.current_oppo]['INT'] += 1
+			if stat_opponent and oppo_stats_dict:
+				state.current_chain = [stat_opponent]
+				if stat_opponent in oppo_stats_dict:
+					oppo_stats_dict[stat_opponent]['CW'] += 1
+					oppo_stats_dict[stat_opponent]['INT'] += 1
 					player_stats['CL'] += 1
 			else:
 				state.current_chain = []
@@ -1405,9 +1415,9 @@ class Player(object):
 			apply_turnover_to_chain()
 			
 			if action in ("Tackle", "Spoil", "Dispossession"):
-				if oppo_stats_dict and state.current_oppo in oppo_stats_dict:
+				if oppo_stats_dict and stat_opponent in oppo_stats_dict:
 					player_stats['CW'] += 1
-					oppo_stats_dict[state.current_oppo]['CL'] += 1
+					oppo_stats_dict[stat_opponent]['CL'] += 1
 				if action == "Tackle":
 					state.current_chain = [playerWithBall]
 				else:
@@ -1801,16 +1811,19 @@ class sim_game(object):
 	def PlayBook(play_type, movement, Max_lateralDist, sideways):
 		# Save previous line position for I50/R50 tracking
 		state.last_play_pos_line = state.play_pos_line
+		Dir_lateral = random.randint(-1,1)
+		# A kick must leave the kicker's coordinate; otherwise the receiving
+		# lookup can select the kicker as the mark target.
+		if sideways == "sideways" and "Kick" in play_type and Max_lateralDist:
+			Dir_lateral = random.choice((-1, 1))
 		if state.possession == "Home":
 			state.play_pos_line += movement
-			Dir_lateral = random.randint(-1,1)
 			if sideways == "sideways":
 				state.play_pos_col += Dir_lateral * Max_lateralDist
 			else:
 				state.play_pos_col += Dir_lateral * random.randint(0, Max_lateralDist)
 		elif state.possession == "Away":
 			state.play_pos_line -= movement
-			Dir_lateral = random.randint(-1,1)
 			if sideways == "sideways":
 				state.play_pos_col += Dir_lateral * Max_lateralDist
 			else:
@@ -1959,23 +1972,32 @@ class sim_game(object):
 		BestOnGround.TrackForm(state.current_player, state.current_oppo)
 	
 	def Generate_Play_defender():
+		contest_carrier = state.current_player
+		contest_defender = state.current_oppo
 		if state.possession in ["Home", "Away"]:
 			oppo_possession = "Away" if state.possession == "Home" else "Home"
 			
-			if state.possession == "Home":
-				ruck_player = state.home.pos_players['h_RUCK']
-				ruck_oppo = state.away.pos_players['a_RUCK']
-			else:
-				ruck_player = state.away.pos_players['a_RUCK']
-				ruck_oppo = state.home.pos_players['h_RUCK']
-
 			if state.action_type == "EffectiveKick":
 				state.action_type = "Mark"
 				state.trans_type = "Carrying"
 				if state.current_player == state.prev_player:
-					state.current_player = ruck_player
-					state.current_oppo = ruck_oppo
-				state.comm_type = "Uncontested Mark Taken"
+					receiving_team = state.home if state.possession == "Home" else state.away
+					opposing_team = state.away if state.possession == "Home" else state.home
+					receiver = receiving_team.nearest_on_field_player(
+						(state.play_pos_col, state.play_pos_line),
+						{state.prev_player},
+					)
+					if receiver is None:
+						state.action_type = "BallGet"
+						state.trans_type = "Defending"
+						state.comm_type = "No Mark"
+					else:
+						receiver_pos, state.current_player = receiver
+						opponent_pos = receiving_team.opponent_pos(receiver_pos)
+						state.current_oppo = opposing_team.player_at(opponent_pos)
+						state.comm_type = "Uncontested Mark Taken"
+				else:
+					state.comm_type = "Uncontested Mark Taken"
 			else:
 				if state.congestion_limiter < 2:
 					p_stats = state.get_effective_stats(state.current_player, state.current_oppo)
@@ -2032,7 +2054,20 @@ class sim_game(object):
 			state.trans_type = "Contest"
 			state.comm_type = "Ball Up For Grabs"
 		
-		Player.updatePlayerStats(state.possession, state.action_type, state.current_player)
+		# A defensive pressure outcome belongs to the opponent who applied the
+		# pressure, not the original ball carrier. Preserve that matchup even
+		# though the positional players are refreshed above for the next play.
+		if state.action_type in ("Tackle", "Dispossession", "Free Against") and contest_defender:
+			state.current_player = contest_carrier
+			state.current_oppo = contest_defender
+			Player.updatePlayerStats(
+				state.possession,
+				state.action_type,
+				contest_defender,
+				contest_carrier,
+			)
+		else:
+			Player.updatePlayerStats(state.possession, state.action_type, state.current_player)
 
 	def Generate_Play_ballCarrier():
 		#state.speed = 7
@@ -2462,7 +2497,7 @@ class sim_game(object):
 			textcommentary.write(PrintCommentary + '\n')
 	
 	def Comm_MatchStart():
-		First = "MATCH COMMENCING SHORTLY ... " + state.home.name + " vs " + state.away.name + '\n'
+		First = "Match commencing shortly ... " + state.home.name + " v " + state.away.name + '\n'
 		if match_settings.competition_mode:
 			s = match_settings.season_number
 			rd = match_settings.round_number
@@ -2471,70 +2506,7 @@ class sim_game(object):
 			First += f"COMPETITION MODE ACTIVE - MATCH ID: {m_id} ({s}, {rd})\n"
 			First += f"ROSTER FINGERPRINT: {rf}\n"
 		First += '\n'
-		h = state.home
-		a = state.away
-		DisplayMatchUps = "[code=rich]" + "                       " + a.name + '\n' + \
-			"FB: " + a.pos_players["a_rBP"] + "|" + \
-			a.pos_players["a_FB"] +"|" + a.pos_players["a_lBP"] + '\n' + \
-			"FF: " + h.pos_players["h_lFP"] +"|" + h.pos_players["h_FF"] +"|" + \
-			h.pos_players["h_rFP"] + '\n' + "HB: " + \
-			a.pos_players["a_rHBF"] +"|" + a.pos_players["a_CHB"] +"|" + \
-			a.pos_players["a_lHBF"] + '\n' + "HF: " + \
-			h.pos_players["h_lHFF"] +"|" + h.pos_players["h_CHF"] +"|" + \
-			h.pos_players["h_rHFF"] + '\n' + "C: " + \
-			a.pos_players["a_rW"] +"|" + a.pos_players["a_C"] +"|" + \
-			a.pos_players["a_lW"] + '\n' + "C: " + \
-			h.pos_players["h_lW"] +"|" + h.pos_players["h_C"] +"|" + \
-			h.pos_players["h_rW"] + '\n' + "HF: " + \
-			a.pos_players["a_rHFF"] +"|" + a.pos_players["a_CHF"] +"|" + \
-			a.pos_players["a_lHFF"] + '\n' + "HB: " + \
-			h.pos_players["h_lHBF"] +"|" + h.pos_players["h_CHB"] +"|" + \
-		 	h.pos_players["h_rHBF"] + '\n' + "FF: " + \
-			a.pos_players["a_rFP"] +"|" + a.pos_players["a_FF"] +"|" + \
-			a.pos_players["a_lFP"] + '\n' + "FB: " + \
-			h.pos_players["h_lBP"] +"|" + h.pos_players["h_FB"] +"|" + \
-			h.pos_players["h_rBP"] + '\n' + "                       " + \
-			h.name + '\n' + '\n' + "[/code]" + \
-			h.name + " FOLL: " + h.pos_players["h_RUCK"] +"|" + \
-			h.pos_players["h_RR"] +"|" + h.pos_players["h_R"] + '\n' + \
-			a.name + " FOLL: " + a.pos_players["a_RUCK"] +"|" + \
-			a.pos_players["a_RR"] +"|" + a.pos_players["a_R"] + '\n' + \
-			'\n' + h.name + " INT: " + \
-			h.pos_players["h_INT1"] +"|" + h.pos_players["h_INT2"] + '\n' + \
-			a.name + " INT: " + a.pos_players["a_INT1"] +"|" + \
-			a.pos_players["a_INT2"]
-		'''
-		DisplayMatchUps = "[TABLE][TR][TD][/TD][TD][/TD][TD]" + a.name + "[/TD][TD][/TD][/TR]" + '\n' + \
-			"[TR][TD]FB:[/TD]" + "[TD]" + a.pos_players["a_rBP"] + "[/TD]" + "[TD]" + \
-			a.pos_players["a_FB"] + "[/TD][TD]" + a.pos_players["a_lBP"] + "[/TD][/TR]" + '\n' + \
-			"[TR][TD]FF:[/TD][TD]" + h.pos_players["h_lFP"] + "[/TD][TD]" + h.pos_players["h_FF"] + \
-			"[/TD][TD]" + h.pos_players["h_rFP"] + "[/TD][/TR]" + '\n' + "[TR][TD]HB:[/TD][TD]" + \
-			a.pos_players["a_rHBF"] + "[/TD][TD]" + a.pos_players["a_CHB"] + "[/TD][TD]" + \
-			a.pos_players["a_lHBF"] + "[/TD][/TR]" + '\n' + "[TR][TD]HF:[/TD][TD]" + \
-			h.pos_players["h_lHFF"] + "[/TD][TD]" + h.pos_players["h_CHF"] + "[/TD][TD]" + \
-			h.pos_players["h_rHFF"] + "[/TD][/TR]" + '\n' + "[TR][TD]C:[/TD][TD]" + \
-			a.pos_players["a_rW"] + "[/TD][TD]" + a.pos_players["a_C"] + "[/TD][TD]" + \
-			a.pos_players["a_lW"] + "[/TD][/TR]" + '\n' + "[TR][TD]C:[/TD][TD]" + \
-			h.pos_players["h_lW"] + "[/TD][TD]" + h.pos_players["h_C"] + "[/TD][TD]" + \
-			h.pos_players["h_rW"] + "[/TD][/TR]" + '\n' + "[TR][TD]HF:[/TD][TD]" + \
-			a.pos_players["a_rHFF"] + "[/TD][TD]" + a.pos_players["a_CHF"] + "[/TD][TD]" + \
-			a.pos_players["a_lHFF"] + "[/TD][/TR]" + '\n' + "[TR][TD]HB:[/TD][TD]" + \
-			h.pos_players["h_lHBF"] + "[/TD][TD]" + h.pos_players["h_CHB"] + "[/TD][TD]" + \
-		 	h.pos_players["h_rHBF"] + "[/TD][/TR]" + '\n' + "[TR][TD]FF:[/TD][TD]" + \
-			a.pos_players["a_rFP"] + "[/TD][TD]" + a.pos_players["a_FF"] + "[/TD][TD]" + \
-			a.pos_players["a_lFP"] + "[/TD][/TR]" + '\n' + "[TR][TD]FB:[/TD][TD]" + \
-			h.pos_players["h_lBP"] + "[/TD][TD]" + h.pos_players["h_FB"] + "[/TD][TD]" + \
-			h.pos_players["h_rBP"] + "[/TD][/TR]" + '\n' + "[TR][TD][/TD][TD][/TD]" + \
-			"[TD]" + h.name + "[/TD][TD][/TD][/TR]" + '\n' + "[TR][TD][/TD][TD][/TD][TD][/TD][TD][/TD][/TR]" + '\n' + \
-			"[TR][TD]" + h.name + " FOLL :[/TD][TD]" + h.pos_players["h_RUCK"] + "[/TD][TD]" + \
-			h.pos_players["h_RR"] + "[/TD][TD]" + h.pos_players["h_R"] + "[/TD][/TR]" + '\n' + \
-			"[TR][TD]" + a.name + " FOLL :[/TD][TD]" + a.pos_players["a_RUCK"] + "[/TD][TD]" + \
-			a.pos_players["a_RR"] + "[/TD][TD]" + a.pos_players["a_R"] + "[/TD][/TR]" + '\n' + \
-			"[TR][TD][/TD][TD][/TD][TD][/TD][TD][/TD][/TR]" + '\n' + "[TR][TD]" + h.name + " INT :[/TD][TD]" + \
-			h.pos_players["h_INT1"] + "[/TD][TD]" + h.pos_players["h_INT2"] + "[/TD][TD][/TD][/TR]" + '\n' + \
-			"[TR][TD]" + a.name + " INT :[/TD][TD]" + a.pos_players["a_INT1"] + "[/TD][TD]" + \
-			a.pos_players["a_INT2"] + "[/TD][TD][/TD][/TR]" + '\n' + "[/TABLE]"
-		'''
+		DisplayMatchUps = format_team_lineup(state)
 		filepath = get_output_path("Commentary.txt")
 		# Unprotect file if it was previously sealed
 		if os.path.exists(filepath):
