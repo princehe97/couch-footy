@@ -1,9 +1,4 @@
-"""
-Launch QootyPy from the refactored tree.
-
-Changes the working directory to the classic project folder (next to python_qooty.py)
-so TeamSelection.csv (preferred) or TeamSelection.xls, images, and outputs use the same paths as the original.
-"""
+"""Launch Couch Footy with CSV rosters, assets and outputs in the app folder."""
 
 from __future__ import annotations
 

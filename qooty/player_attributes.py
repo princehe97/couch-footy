@@ -19,6 +19,10 @@ DEFAULT_STATS: dict[str, int] = {
 MAX_TOTAL_POINTS: int = 100
 
 
+class SkillAllocationError(ValueError):
+    """A player's skill values break the roster allocation rules."""
+
+
 @dataclass(frozen=True)
 class PlayerStats:
     """Immutable stat block for an individual player."""
@@ -48,13 +52,13 @@ class PlayerStats:
         for stat in STAT_NAMES:
             val = getattr(self, stat)
             if val < 0:
-                raise ValueError(
+                raise SkillAllocationError(
                     f"Invalid stat for {player_name}: {stat} cannot be negative (got {val})."
                 )
 
         tot = self.total()
         if tot > MAX_TOTAL_POINTS:
-            raise ValueError(
+            raise SkillAllocationError(
                 f"Stat allocation exceeded for {player_name}: total is {tot} (max allowed {MAX_TOTAL_POINTS})."
             )
 
@@ -156,12 +160,12 @@ class PlayerStats:
         penalty = min(0.50, 0.10 + max(0.0, overtime_minutes) * 0.015)
         mult = 1.0 - penalty
         return PlayerStats(
-            strength=max(1, int(round(self.strength * mult))),
-            speed=max(1, int(round(self.speed * mult))),
-            agility=max(1, int(round(self.agility * mult))),
-            skill=max(1, int(round(self.skill * mult))),
+            strength=max(0, int(round(self.strength * mult))),
+            speed=max(0, int(round(self.speed * mult))),
+            agility=max(0, int(round(self.agility * mult))),
+            skill=max(0, int(round(self.skill * mult))),
             endurance=self.endurance,
-            pressure=max(1, int(round(self.pressure * mult))),
+            pressure=max(0, int(round(self.pressure * mult))),
             aura=self.aura,
         )
 

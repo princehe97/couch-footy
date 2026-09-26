@@ -1,45 +1,34 @@
-"""
-Load team rosters from CSV (stdlib only) or fall back to TeamSelection.xls via pandas.
-
-When both exist, CSV is preferred. Place TeamSelection.csv next to TeamSelection.xls
-(in the project root when using run_game.py).
-"""
+"""Load team rosters from TeamSelection.csv using the Python standard library."""
 
 from __future__ import annotations
 
 import csv
-import json
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-# region agent log
-_DEBUG_LOG = Path(__file__).resolve().parents[2] / "debug-5c3432.log"
-
-
 def _agent_log(location: str, message: str, data: dict | None = None, hypothesis_id: str = "?") -> None:
-	try:
-		rec = {
-			"sessionId": "5c3432",
-			"timestamp": int(time.time() * 1000),
-			"location": location,
-			"message": message,
-			"data": data or {},
-			"hypothesisId": hypothesis_id,
-		}
-		with _DEBUG_LOG.open("a", encoding="utf-8") as f:
-			f.write(json.dumps(rec, default=str) + "\n")
-	except Exception:
-		pass
-
-
-# endregion
+	"""Compatibility no-op for retired development diagnostics."""
+	return None
 
 CSV_NAME = "TeamSelection.csv"
-XLS_NAME = "TeamSelection.xls"
 
 
 from qooty.player_attributes import DEFAULT_STATS, PlayerStats
+
+
+class DuplicatePlayerNameError(ValueError):
+	"""Two roster entries share a player name."""
+
+
+class UnsupportedNameError(ValueError):
+	"""A team or player name contains unsupported non-ASCII characters."""
+
+
+def validate_name_characters(name: str, label: str) -> None:
+	if not name.isascii():
+		raise UnsupportedNameError(
+			f'{label}: please remove accents (e.g. José -> Jose), emojis and special symbols.'
+		)
 
 
 @dataclass(frozen=True)
@@ -58,20 +47,21 @@ class RosterData:
 	away_player_stats: dict[str, PlayerStats] = field(default_factory=dict)
 
 
-def _scalar_str(value: object) -> str:
-	if value is None:
-		return ""
-	try:
-		import math
-
-		if isinstance(value, float) and not math.isnan(value) and float(value).is_integer():
-			return str(int(value))
-	except (TypeError, ValueError):
-		pass
-	s = str(value).strip()
-	if s.endswith(".0") and s[:-2].isdigit():
-		return s[:-2]
-	return s
+	def __post_init__(self) -> None:
+		validate_name_characters(self.home_team, "Home team name")
+		validate_name_characters(self.away_team, "Away team name")
+		seen: dict[str, str] = {}
+		for side, players in (("Home", self.home_players), ("Away", self.away_players)):
+			for number, name in enumerate(players, 1):
+				key = name.strip().casefold()
+				location = f"{side} player {number}"
+				validate_name_characters(name, location)
+				if key in seen:
+					raise DuplicatePlayerNameError(
+						f'Duplicate player name "{name.strip()}" at {seen[key]} and {location}. '
+						"Every player across both teams must have a unique name."
+					)
+				seen[key] = location
 
 
 def _parse_stat_val(val: str, default: int) -> int:
@@ -109,8 +99,15 @@ def _extract_player_stats(row_slice: list[str], player_name: str, is_aura_tenth:
 
 
 def _parse_csv(path: Path) -> RosterData:
-	with path.open(newline="", encoding="utf-8-sig") as f:
-		rows = list(csv.reader(f))
+	try:
+		with path.open(newline="", encoding="utf-8-sig") as f:
+			rows = list(csv.reader(f))
+	except UnicodeDecodeError as exc:
+		raise UnsupportedNameError(
+			f'{path.name}: some letters or symbols could not be read. '
+			'Please remove accents (e.g. José -> Jose), emojis and special symbols, '
+			'then save the file as CSV UTF-8.'
+		) from exc
 
 	def nonempty(r: list[str]) -> bool:
 		return bool(r) and any(c.strip() for c in r)
@@ -190,72 +187,18 @@ def _parse_csv(path: Path) -> RosterData:
 	)
 
 
-def _parse_xls(path: Path) -> RosterData:
-	import pandas as pd
-
-	try:
-		df = pd.read_excel(path, header=0, engine="xlrd")
-	except ImportError as exc:
-		raise ImportError(
-			"Reading .xls requires xlrd. Install with: pip install \"xlrd>=2.0.1\" "
-			"or add TeamSelection.csv next to TeamSelection.xls to avoid Excel readers."
-		) from exc
-
-	def cell(r: int, c: int) -> str:
-		if c >= df.shape[1]:
-			return ""
-		return _scalar_str(df.iloc[r, c])
-
-	season = cell(0, 1) or "0"
-	round_val = cell(1, 1) or "0"
-	home_team = cell(2, 1)
-	away_team = cell(3, 1)
-	match_id = cell(4, 1) or "0"
-	home_pos_index = [cell(r, 0) for r in range(6, 26)]
-	home_players = [cell(r, 1) for r in range(6, 26)]
-	away_pos_index = [cell(r, 2) for r in range(6, 26)]
-	away_players = [cell(r, 3) for r in range(6, 26)]
-
-	h_stats_map: dict[str, PlayerStats] = {}
-	a_stats_map: dict[str, PlayerStats] = {}
-
-	for idx, r in enumerate(range(6, 26)):
-		h_name = home_players[idx]
-		a_name = away_players[idx]
-		h_raw = [cell(r, c) for c in range(4, 11)]
-		a_raw = [cell(r, c) for c in range(11, 18)]
-		h_stats_map[h_name] = _extract_player_stats(h_raw, h_name)
-		a_stats_map[a_name] = _extract_player_stats(a_raw, a_name)
-
-	return RosterData(
-		home_team=home_team,
-		away_team=away_team,
-		season=season,
-		round=round_val,
-		match_id=match_id,
-		home_pos_index=home_pos_index,
-		home_players=home_players,
-		away_pos_index=away_pos_index,
-		away_players=away_players,
-		source=str(path),
-		home_player_stats=h_stats_map,
-		away_player_stats=a_stats_map,
-	)
-
-
 def load_roster(base_dir: Path | None = None) -> RosterData:
 	"""
-	Load roster from ``TeamSelection.csv`` if present, else ``TeamSelection.xls``.
+	Load roster from ``TeamSelection.csv``.
 
 	:param base_dir: Directory containing team files (default: current working directory).
 	"""
 	root = base_dir or Path.cwd()
 	csv_path = root / CSV_NAME
-	xls_path = root / XLS_NAME
 	_agent_log(
 		"team_selection.load_roster",
 		"enter",
-		{"cwd": str(root.resolve()), "csv_exists": csv_path.is_file(), "xls_exists": xls_path.is_file()},
+		{"cwd": str(root.resolve()), "csv_exists": csv_path.is_file()},
 		"H1",
 	)
 	try:
@@ -263,14 +206,10 @@ def load_roster(base_dir: Path | None = None) -> RosterData:
 			r = _parse_csv(csv_path)
 			_agent_log("team_selection.load_roster", "csv_ok", {"source": r.source, "home_team": r.home_team}, "H1")
 			return r
-		if xls_path.is_file():
-			r = _parse_xls(xls_path)
-			_agent_log("team_selection.load_roster", "xls_ok", {"source": r.source}, "H1")
-			return r
 		_agent_log("team_selection.load_roster", "no_team_file", {}, "H1")
 		raise FileNotFoundError(
-			f"No {CSV_NAME} or {XLS_NAME} in {root.resolve()}. "
-			f"Copy TeamSelection.sample.csv to {CSV_NAME} or provide TeamSelection.xls."
+			f"No {CSV_NAME} in {root.resolve()}. "
+			f"Provide {CSV_NAME} to import a roster."
 		)
 	except Exception as e:
 		_agent_log(

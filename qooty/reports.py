@@ -18,6 +18,46 @@ BASIC_PLAYER_STATS = ("HO", "K", "M", "HB", "T", "FF", "FA", "G", "B", "D", "DT"
 ADVANCED_PLAYER_STATS = tuple(cat for cat in STAT_CATEGORIES if cat not in BASIC_PLAYER_STATS)
 
 
+def csv_text(value):
+    """Prefix formula-like text for spreadsheet CSVs; preserve numeric values."""
+    if isinstance(value, str):
+        if (value.lstrip().startswith(("=", "+", "-", "@", "＝", "＋", "－", "＠"))
+                or value.startswith(("\t", "\r", "\n"))):
+            return "'" + value
+    return value
+
+
+class TextCSVWriter:
+    def __init__(self, handle, **kwargs):
+        self.writer = csv.writer(handle, **kwargs)
+
+    def writerow(self, row):
+        return self.writer.writerow([csv_text(value) for value in row])
+
+    def writerows(self, rows):
+        for row in rows:
+            self.writerow(row)
+
+
+class TextCSVDictWriter(csv.DictWriter):
+    def writerow(self, rowdict):
+        return super().writerow({key: csv_text(value) for key, value in rowdict.items()})
+
+    def writerows(self, rowdicts):
+        for row in rowdicts:
+            self.writerow(row)
+
+
+def write_dataframe_csv(frame, path, **kwargs):
+    """Sanitize cells, index and headers without changing match data."""
+    safe = frame.apply(lambda column: column.map(csv_text))
+    safe.index = frame.index.map(csv_text)
+    safe.columns = frame.columns.map(csv_text)
+    safe.index.name = csv_text(frame.index.name)
+    safe.columns.name = csv_text(frame.columns.name)
+    safe.to_csv(path, **kwargs)
+
+
 def write_player_stat_exports(ms: MatchState, output_dir: Path | None = None) -> None:
     """Export rectangular basic/advanced tables for the latest match.
 
@@ -31,7 +71,7 @@ def write_player_stat_exports(ms: MatchState, output_dir: Path | None = None) ->
         path = output_dir / filename if output_dir is not None else Path(get_output_path(filename))
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=["PLAYER", "TEAM", *categories])
+            writer = TextCSVDictWriter(handle, fieldnames=["PLAYER", "TEAM", *categories])
             writer.writeheader()
             for team in (ms.home, ms.away):
                 for player in team.players:
@@ -181,7 +221,7 @@ _INT_FIELDS = ["QTR", "TIME", "PLAYER", *STAT_CATEGORIES, "TEAM", "POSITION"]
 
 def init_interchange_log() -> None:
     with open("InterchangeLog.csv", "w", newline="\n", encoding="utf-8") as f:
-        csv.DictWriter(f, fieldnames=_INT_FIELDS).writeheader()
+        TextCSVDictWriter(f, fieldnames=_INT_FIELDS).writeheader()
 
 
 def write_interchange_row(ms: MatchState) -> None:
@@ -202,7 +242,7 @@ def write_interchange_row(ms: MatchState) -> None:
         }
 
     with open("InterchangeLog.csv", "a", newline="\n", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=_INT_FIELDS)
+        writer = TextCSVDictWriter(f, fieldnames=_INT_FIELDS)
         writer.writerow(_row("ON", on_name, ms.key_on))
         writer.writerow(_row("OFF", off_name, ms.key_off))
 
@@ -213,7 +253,7 @@ def write_interchange_row(ms: MatchState) -> None:
 
 def write_quarter_score_row(ms: MatchState) -> None:
     with open("PlayerStats.csv", "a", newline="\n", encoding="utf-8") as f:
-        w = csv.writer(f)
+        w = TextCSVWriter(f)
         if ms.qtr - 1 == 1:
             w.writerow([
                 "QTR",
@@ -243,7 +283,7 @@ def generate_stat_reports(ms: MatchState) -> None:
     # Player stats
     full_stats = {**ms.home.stats, **ms.away.stats}
     df = pd.DataFrame(full_stats).transpose()
-    df.to_csv("PlayerStats.csv", mode="a")
+    write_dataframe_csv(df, "PlayerStats.csv", mode="a")
 
     # Team totals
     n_home = len(ms.home.players)
@@ -251,7 +291,7 @@ def generate_stat_reports(ms: MatchState) -> None:
     df_away = df.iloc[n_home:]
     team_df = pd.concat([df_home.sum(), df_away.sum()], axis=1)
     team_df.columns = [ms.home.name, ms.away.name]
-    team_df.to_csv("TeamStats.csv")
+    write_dataframe_csv(team_df, "TeamStats.csv")
 
     # Form / Best-on-Ground
     full_form = {**ms.home.player_form, **ms.away.player_form}
@@ -261,11 +301,11 @@ def generate_stat_reports(ms: MatchState) -> None:
     three_votes = form_df.iat[0, 1]
     two_votes = form_df.iat[1, 1]
     one_vote = form_df.iat[2, 1]
-    form_df.to_csv("Form.csv")
+    write_dataframe_csv(form_df, "Form.csv")
 
     # 3-2-1 votes
     with open("PlayerStats.csv", "a", newline="\n", encoding="utf-8") as f:
-        w = csv.writer(f)
+        w = TextCSVWriter(f)
         w.writerow(["\n"])
         w.writerow(["VOTES"])
         w.writerow([3, 2, 1])

@@ -1,4 +1,11 @@
 __pycache__/
 *.py[cod]
 .venv/
+.build-venv/
 outputs/
+build/
+dist/
+*.spec
+.tmp/
+release/
+saved_teams/

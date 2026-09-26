@@ -10,11 +10,15 @@ import pandas as pd
 import pygame
 
 from qooty import match_settings
-from qooty.team_selection import _agent_log, load_roster
+from qooty.team_selection import _agent_log, load_roster, DuplicatePlayerNameError, UnsupportedNameError
+from qooty.team_setup import TeamSetup, SetupClosed
 from qooty.match_state import MatchState
-from qooty.reports import write_player_stat_exports
+from qooty.player_attributes import SkillAllocationError
+from qooty.reports import (write_player_stat_exports, TextCSVWriter,
+    TextCSVDictWriter, write_dataframe_csv)
 
 state = MatchState()
+selected_roster = None
 
 pygame.init()
 
@@ -70,14 +74,13 @@ def _scaled_mouse_get_pos():
 pygame.mouse.get_pos = _scaled_mouse_get_pos
 
 # Defining the variables that load the various background images for screens using absolute paths
-from qooty.paths import PROJECT_ROOT, get_output_path
+from qooty.paths import get_output_path, get_resource_path
 
-start_bg = pygame.image.load(str(PROJECT_ROOT / 'start.png'))
-game_bg = pygame.image.load(str(PROJECT_ROOT / 'gamescreen.png'))
-general_bg = pygame.image.load(str(PROJECT_ROOT / 'generic.png'))
+start_bg = pygame.image.load(str(get_resource_path('start.png')))
+game_bg = pygame.image.load(str(get_resource_path('gamescreen.png')))
 
 # Load commentary data from JSON
-with open(str(PROJECT_ROOT / 'qooty' / 'commentary.json'), 'r') as f:
+with open(get_resource_path('qooty/commentary.json'), 'r', encoding='utf-8') as f:
     COMMENTARY_DATA = json.load(f)
 
 #defining variables that set the fonts and respective sizes
@@ -101,8 +104,9 @@ MENU_TAGLINE      = (210, 200, 170)   # warm off-white for subtitle text
 _BTN_W     = 220   # button width
 _BTN_H     =  44   # button height
 _BTN_X     = (ScreenWidth - _BTN_W) // 2   # horizontal centre
-_BTN_Y1    = 300   # "Play Footy" top edge
-_BTN_Y2    = 354   # "Settings"   top edge
+_BTN_Y1    = 272   # "Play Footy" top edge
+_BTN_Y2    = 316   # "How to Play" top edge
+_BTN_Y3    = 360   # "Settings" top edge
 _BTN_RADII = 6     # corner radius (drawn with rects + circles for pixel feel)
 
 myfont_menu_btn  = pygame.font.SysFont("Verdana", 18, bold=True)
@@ -197,17 +201,19 @@ def main_menu():
 	global on_main_menu
 	global playing_match
 	global settings
+	global instructions
+	global selected_roster, run
 
 	mx, my = mouse
 
 	# ── Tagline ──────────────────────────────────────────────────────────────
 	tagline = myfont_menu_tag.render("Quick Footy Action — Made with PyGame", 1, MENU_TAGLINE)
 	tag_x = (ScreenWidth - tagline.get_width()) // 2
-	win.blit(tagline, (tag_x, 276))
+	win.blit(tagline, (tag_x, 250))
 
 	# ── Button 1: Play Footy ─────────────────────────────────────────────────
-	btn1_rect = (_BTN_X, _BTN_Y1, _BTN_W, _BTN_H)
-	btn1_hover = _BTN_X + _BTN_W > mx > _BTN_X and _BTN_Y1 + _BTN_H > my > _BTN_Y1
+	btn1_rect = (_BTN_X, _BTN_Y1, _BTN_W, 36)
+	btn1_hover = _BTN_X + _BTN_W > mx > _BTN_X and _BTN_Y1 + 36 > my > _BTN_Y1
 
 	fill1   = MENU_OLIVE_HOVER if btn1_hover else MENU_OLIVE
 	label1_colour = MENU_AMBER_BRIGHT if btn1_hover else MENU_AMBER
@@ -215,35 +221,269 @@ def main_menu():
 
 	label1 = myfont_menu_btn.render(">  Play Footy", 1, label1_colour)
 	lx1 = _BTN_X + (_BTN_W - label1.get_width()) // 2
-	ly1 = _BTN_Y1 + (_BTN_H - label1.get_height()) // 2
+	ly1 = _BTN_Y1 + (36 - label1.get_height()) // 2
 	win.blit(label1, (lx1, ly1))
 
 	if btn1_hover and click[0] == 1:
-		on_main_menu = False
-		playing_match = True
+		try:
+			selected_roster = TeamSetup(win).run()
+		except SetupClosed:
+			run = False
+			return
+		on_main_menu = selected_roster is None
+		playing_match = selected_roster is not None
 		settings = False
+		instructions = False
 		pygame.time.delay(200)
 
-	# ── Button 2: Settings ───────────────────────────────────────────────────
-	btn2_rect = (_BTN_X, _BTN_Y2, _BTN_W, _BTN_H)
-	btn2_hover = _BTN_X + _BTN_W > mx > _BTN_X and _BTN_Y2 + _BTN_H > my > _BTN_Y2
+	# ── Button 2: How to Play ────────────────────────────────────────────────
+	btn2_rect = (_BTN_X, _BTN_Y2, _BTN_W, 36)
+	btn2_hover = _BTN_X + _BTN_W > mx > _BTN_X and _BTN_Y2 + 36 > my > _BTN_Y2
 
 	fill2   = MENU_OLIVE_HOVER if btn2_hover else MENU_OLIVE
 	label2_colour = MENU_AMBER_BRIGHT if btn2_hover else MENU_AMBER
 	_draw_menu_button(win, btn2_rect, fill2, MENU_BORDER)
 
-	label2 = myfont_menu_btn.render("*  Settings", 1, label2_colour)
+	label2 = myfont_menu_btn.render("?  How to Play", 1, label2_colour)
 	lx2 = _BTN_X + (_BTN_W - label2.get_width()) // 2
-	ly2 = _BTN_Y2 + (_BTN_H - label2.get_height()) // 2
+	ly2 = _BTN_Y2 + (36 - label2.get_height()) // 2
 	win.blit(label2, (lx2, ly2))
 
 	if btn2_hover and click[0] == 1:
 		on_main_menu = False
 		playing_match = False
+		settings = False
+		instructions = True
+		pygame.time.delay(80)
+
+	# ── Button 3: Settings ───────────────────────────────────────────────────
+	btn3_rect = (_BTN_X, _BTN_Y3, _BTN_W, 36)
+	btn3_hover = _BTN_X + _BTN_W > mx > _BTN_X and _BTN_Y3 + 36 > my > _BTN_Y3
+	fill3 = MENU_OLIVE_HOVER if btn3_hover else MENU_OLIVE
+	label3_colour = MENU_AMBER_BRIGHT if btn3_hover else MENU_AMBER
+	_draw_menu_button(win, btn3_rect, fill3, MENU_BORDER)
+	label3 = myfont_menu_btn.render("*  Settings", 1, label3_colour)
+	win.blit(label3, (_BTN_X + (_BTN_W - label3.get_width()) // 2,
+	                  _BTN_Y3 + (36 - label3.get_height()) // 2))
+	if btn3_hover and click[0] == 1:
+		on_main_menu = False
+		playing_match = False
 		settings = True
+		instructions = False
 		pygame.time.delay(80)
 
 	# ── Refresh display ──────────────────────────────────────────────────────
+	pygame.display.update()
+
+
+def open_instructions():
+	"""Draw the branded, single-page match guide available from the main menu."""
+	global on_main_menu, instructions, instructions_page, run
+
+	if instructions_page == 2:
+		open_stats_guide()
+		return
+
+	win.blit(start_bg, (0, 0))
+	panel = pygame.Surface((ScreenWidth, ScreenHeight), pygame.SRCALPHA)
+	panel.fill((8, 10, 5, 225))
+	win.blit(panel, (0, 0))
+
+	mx, my = mouse
+	title_font = pygame.font.SysFont("Verdana", 30, bold=True)
+	section_font = pygame.font.SysFont("Verdana", 14, bold=True)
+	body_font = pygame.font.SysFont("Consolas", 11, bold=True)
+	small_font = pygame.font.SysFont("Consolas", 10)
+
+	title = title_font.render("HOW TO PLAY", 1, MENU_AMBER)
+	win.blit(title, (18, 12))
+	subtitle = myfont_menu_tag.render("Your quick guide to match day", 1, MENU_TAGLINE)
+	win.blit(subtitle, (20, 46))
+	pygame.draw.line(win, MENU_BORDER, (18, 66), (622, 66), 2)
+
+	def _guide_card(x, y, w, h, number, heading, lines, accent=MENU_AMBER):
+		pygame.draw.rect(win, (22, 25, 14), (x, y, w, h))
+		pygame.draw.rect(win, (86, 91, 48), (x, y, w, h), 1)
+		pygame.draw.rect(win, MENU_OLIVE, (x, y, w, 27))
+		pygame.draw.rect(win, MENU_BORDER, (x, y, w, 27), 1)
+		pygame.draw.circle(win, accent, (x + 16, y + 13), 9)
+		num = small_font.render(str(number), 1, (25, 27, 14))
+		win.blit(num, (x + 16 - num.get_width() // 2, y + 13 - num.get_height() // 2))
+		hdr = section_font.render(heading, 1, MENU_AMBER_BRIGHT)
+		win.blit(hdr, (x + 31, y + 5))
+		for i, line in enumerate(lines):
+			win.blit(body_font.render(line, 1, RETRO_WHITE), (x + 10, y + 37 + i * 17))
+
+	_guide_card(18, 78, 194, 128, 1, "SET THE MATCH", [
+		"Choose Settings to tune:",
+		"- Weather & sim speed",
+		"- Home-ground advantage",
+		"- Competition mode",
+		"Use CSV or saved teams.",
+	])
+	_guide_card(223, 78, 194, 128, 2, "WATCH IT UNFOLD", [
+		"Select Play Footy.",
+		"The match sim runs itself:",
+		"contests, marks, tackles,",
+		"kicks and handballs play out",
+		"through live commentary.",
+	], (120, 190, 255))
+	_guide_card(428, 78, 194, 128, 3, "READ THE GAME", [
+		"Track the score and clock,",
+		"ball position, possession,",
+		"match leaders and momentum.",
+		"Player ratings shape how",
+		"each contest is resolved.",
+	], (255, 135, 110))
+
+	pygame.draw.rect(win, (36, 31, 10), (18, 218, 604, 58))
+	pygame.draw.rect(win, MENU_BORDER, (18, 218, 604, 58), 2)
+	win.blit(section_font.render("SCORING", 1, MENU_AMBER_BRIGHT), (30, 226))
+	win.blit(body_font.render("GOAL", 1, RETRO_WHITE), (145, 226))
+	win.blit(myfont_score_num.render("6", 1, RETRO_GOLD), (191, 222))
+	win.blit(body_font.render("points", 1, MENU_TAGLINE), (210, 226))
+	win.blit(body_font.render("BEHIND", 1, RETRO_WHITE), (315, 226))
+	win.blit(myfont_score_num.render("1", 1, RETRO_GOLD), (374, 222))
+	win.blit(body_font.render("point", 1, MENU_TAGLINE), (393, 226))
+	example = body_font.render("Example:  12 goals 8 behinds  =  12.8 (80)", 1, MENU_TAGLINE)
+	win.blit(example, ((ScreenWidth - example.get_width()) // 2, 251))
+
+	pygame.draw.rect(win, (18, 21, 12), (18, 288, 604, 49))
+	pygame.draw.rect(win, (86, 91, 48), (18, 288, 604, 49), 1)
+	win.blit(section_font.render("MATCH-DAY TIP", 1, MENU_AMBER), (30, 296))
+	tip = body_font.render("Weather changes the pace of play. Fast sim speed is best for quick results.", 1, RETRO_WHITE)
+	win.blit(tip, (30, 316))
+
+	back_rect = (110, 351, 200, 38)
+	back_hover = back_rect[0] + back_rect[2] > mx > back_rect[0] and back_rect[1] + back_rect[3] > my > back_rect[1]
+	_draw_menu_button(win, back_rect,
+	                  MENU_OLIVE_HOVER if back_hover else MENU_OLIVE, MENU_BORDER)
+	back_label = myfont_menu_btn.render("< Back to Menu", 1,
+	                                    MENU_AMBER_BRIGHT if back_hover else MENU_AMBER)
+	win.blit(back_label, (back_rect[0] + (back_rect[2] - back_label.get_width()) // 2,
+	                      back_rect[1] + (back_rect[3] - back_label.get_height()) // 2))
+
+	if back_hover and click[0] == 1:
+		instructions = False
+		on_main_menu = True
+		pygame.time.delay(200)
+
+	next_rect = (330, 351, 200, 38)
+	next_hover = next_rect[0] + next_rect[2] > mx > next_rect[0] and next_rect[1] + next_rect[3] > my > next_rect[1]
+	_draw_menu_button(win, next_rect,
+	                  MENU_OLIVE_HOVER if next_hover else MENU_OLIVE, MENU_BORDER)
+	next_label = myfont_menu_btn.render("Stat Guide  >", 1,
+	                                    MENU_AMBER_BRIGHT if next_hover else MENU_AMBER)
+	win.blit(next_label, (next_rect[0] + (next_rect[2] - next_label.get_width()) // 2,
+	                      next_rect[1] + (next_rect[3] - next_label.get_height()) // 2))
+	if next_hover and click[0] == 1:
+		instructions_page = 2
+		pygame.time.delay(200)
+
+	for event in _poll_events():
+		if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_RETURN):
+			instructions = False
+			on_main_menu = True
+
+	pygame.display.update()
+
+
+def open_stats_guide():
+	"""Draw page two of the guide: match stats and player skill allocations."""
+	global on_main_menu, instructions, instructions_page, run
+
+	win.blit(start_bg, (0, 0))
+	panel = pygame.Surface((ScreenWidth, ScreenHeight), pygame.SRCALPHA)
+	panel.fill((8, 10, 5, 232))
+	win.blit(panel, (0, 0))
+	mx, my = mouse
+
+	title_font = pygame.font.SysFont("Verdana", 27, bold=True)
+	heading_font = pygame.font.SysFont("Verdana", 12, bold=True)
+	text_font = pygame.font.SysFont("Consolas", 10)
+	text_bold = pygame.font.SysFont("Consolas", 10, bold=True)
+
+	win.blit(title_font.render("STATS & PLAYER SKILLS", 1, MENU_AMBER), (18, 9))
+	win.blit(myfont_menu_tag.render("The numbers behind every performance", 1, MENU_TAGLINE), (20, 42))
+	pygame.draw.line(win, MENU_BORDER, (18, 60), (622, 60), 2)
+
+	def _glossary_card(x, y, w, h, heading, entries):
+		pygame.draw.rect(win, (19, 22, 12), (x, y, w, h))
+		pygame.draw.rect(win, (86, 91, 48), (x, y, w, h), 1)
+		pygame.draw.rect(win, MENU_OLIVE, (x, y, w, 23))
+		pygame.draw.rect(win, MENU_BORDER, (x, y, w, 23), 1)
+		win.blit(heading_font.render(heading, 1, MENU_AMBER_BRIGHT), (x + 8, y + 4))
+		for i, (abbr, meaning) in enumerate(entries):
+			ty = y + 29 + i * 14
+			win.blit(text_bold.render(abbr, 1, MENU_AMBER), (x + 8, ty))
+			win.blit(text_font.render(meaning, 1, RETRO_WHITE), (x + 39, ty))
+
+	basic_stats = [
+		("HO", "Hitouts"), ("K", "Kicks"), ("M", "Marks"),
+		("HB", "Handballs"), ("T", "Tackles"), ("FF", "Free kicks for"),
+		("FA", "Free kicks against"), ("G", "Goals (6 points)"),
+		("B", "Behinds (1 point)"), ("D", "Disposals (K + HB)"),
+		("DT", "Fantasy score*"),
+	]
+	advanced_one = [
+		("SI", "Score involvements"), ("INT", "Intercepts"),
+		("TO", "Turnovers"), ("CW", "Contest wins"),
+		("CL", "Contest losses"), ("R50", "Rebound 50s"),
+		("I50", "Inside 50s"), ("BNC", "Running bounces"),
+	]
+	advanced_two = [
+		("CP", "Contested possessions"), ("UP", "Uncontested possessions"),
+		("CM", "Contested marks"), ("UM", "Uncontested marks"),
+		("T50", "Tackles inside 50"), ("SPO", "Spoils"),
+		("SMO", "Smothers"),
+	]
+	_glossary_card(18, 70, 194, 187, "BASIC MATCH STATS", basic_stats)
+	_glossary_card(223, 70, 194, 187, "ADVANCED STATS  A-M", advanced_one)
+	_glossary_card(428, 70, 194, 187, "ADVANCED STATS  N-Z", advanced_two)
+
+	# Skill allocation card. The descriptions mirror player_attributes.py and
+	# the contest pairings used by the simulation engine.
+	pygame.draw.rect(win, (27, 28, 13), (18, 266, 604, 84))
+	pygame.draw.rect(win, MENU_BORDER, (18, 266, 604, 84), 1)
+	win.blit(heading_font.render("PLAYER SKILL ALLOCATION", 1, MENU_AMBER_BRIGHT), (28, 273))
+	win.blit(text_font.render("Spend up to 100 points across 7 skills (no negatives). Default: 15 each + 10 Aura.", 1, RETRO_WHITE), (28, 291))
+
+	left_skills = "STR  physical contests/rucks   SPD  separation/runs   AGI  evade & break pressure"
+	right_skills = "SKL  disposal/goal accuracy   END  fatigue/subs   PRS  tackles/smothers   AUR  clutch play"
+	win.blit(text_font.render(left_skills, 1, MENU_TAGLINE), (28, 308))
+	win.blit(text_font.render(right_skills, 1, MENU_TAGLINE), (28, 323))
+	win.blit(text_font.render("Contest odds compare players and stay within 30-70%. Skill success ranges 50-65%.", 1, MENU_AMBER), (28, 338))
+
+	# DT scoring note sits under its glossary column without crowding definitions.
+	dt_note = text_font.render("* DT: K 3, HB 2, M 3, T 4, FF 1, FA -3, G 6, B 1", 1, (170, 165, 125))
+	win.blit(dt_note, (224, 248))
+
+	guide_rect = (110, 358, 200, 34)
+	menu_rect = (330, 358, 200, 34)
+	guide_hover = guide_rect[0] + guide_rect[2] > mx > guide_rect[0] and guide_rect[1] + guide_rect[3] > my > guide_rect[1]
+	menu_hover = menu_rect[0] + menu_rect[2] > mx > menu_rect[0] and menu_rect[1] + menu_rect[3] > my > menu_rect[1]
+	_draw_menu_button(win, guide_rect, MENU_OLIVE_HOVER if guide_hover else MENU_OLIVE, MENU_BORDER)
+	_draw_menu_button(win, menu_rect, MENU_OLIVE_HOVER if menu_hover else MENU_OLIVE, MENU_BORDER)
+	guide_label = myfont_menu_btn.render("< Game Guide", 1, MENU_AMBER_BRIGHT if guide_hover else MENU_AMBER)
+	menu_label = myfont_menu_btn.render("Main Menu", 1, MENU_AMBER_BRIGHT if menu_hover else MENU_AMBER)
+	win.blit(guide_label, (guide_rect[0] + (guide_rect[2] - guide_label.get_width()) // 2,
+	                       guide_rect[1] + (guide_rect[3] - guide_label.get_height()) // 2))
+	win.blit(menu_label, (menu_rect[0] + (menu_rect[2] - menu_label.get_width()) // 2,
+	                      menu_rect[1] + (menu_rect[3] - menu_label.get_height()) // 2))
+
+	if guide_hover and click[0] == 1:
+		instructions_page = 1
+		pygame.time.delay(200)
+	if menu_hover and click[0] == 1:
+		instructions_page = 1
+		instructions = False
+		on_main_menu = True
+		pygame.time.delay(200)
+
+	for event in _poll_events():
+		if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+			instructions_page = 1
+
 	pygame.display.update()
 
 def ShowPostMatchScreen():
@@ -254,8 +494,7 @@ def ShowPostMatchScreen():
 	_PM_COLS   = ["HO", "K", "M", "HB", "T", "FF", "FA", "G", "B", "D", "DT"]
 	_COL_W     = 22   # pixels per stat column (11 cols — slightly tighter)
 	_NAME_W    = 56   # pixels for player name column
-	_ROW_H     = 15   # row height in pixels
-	_MAX_ROWS  = 16   # max players shown per team
+	_ROW_H     = 12   # compact enough to show the complete 20-player roster
 
 	# ── Background: Couch Footy photo + dark frosted overlay ─────────────────
 	win.blit(start_bg, (0, 0))
@@ -331,7 +570,7 @@ def ShowPostMatchScreen():
 	# player rows
 	row_y = CARD_Y + 35
 	ROW_FILL_ALT = (20, 30, 55)
-	for i, pos in enumerate(list(state.home.pos_index)[:_MAX_ROWS]):
+	for i, pos in enumerate(state.home.pos_index):
 		p_name = state.home.pos_players[pos]
 		if i % 2 == 1:
 			pygame.draw.rect(win, ROW_FILL_ALT, (HOME_X + 2, row_y - 1, CARD_W - 4, _ROW_H))
@@ -341,8 +580,7 @@ def ShowPostMatchScreen():
 		pstats = state.home.stats.get(p_name, {})
 		for col in _PM_COLS:
 			val = pstats.get(col, 0)
-			col_col = RETRO_GOLD if col in ("G", "FA", "DT") else RETRO_WHITE
-			v_lbl = myfont_badge.render(str(val), 1, col_col)
+			v_lbl = myfont_badge.render(str(val), 1, RETRO_WHITE)
 			win.blit(v_lbl, (cx, row_y))
 			cx += _COL_W
 		row_y += _ROW_H
@@ -366,7 +604,7 @@ def ShowPostMatchScreen():
 	# player rows
 	row_y = CARD_Y + 35
 	ROW_FILL_ALT_A = (55, 18, 18)
-	for i, pos in enumerate(list(state.away.pos_index)[:_MAX_ROWS]):
+	for i, pos in enumerate(state.away.pos_index):
 		p_name = state.away.pos_players[pos]
 		if i % 2 == 1:
 			pygame.draw.rect(win, ROW_FILL_ALT_A, (AWAY_X + 2, row_y - 1, CARD_W - 4, _ROW_H))
@@ -376,8 +614,7 @@ def ShowPostMatchScreen():
 		pstats = state.away.stats.get(p_name, {})
 		for col in _PM_COLS:
 			val = pstats.get(col, 0)
-			col_col = RETRO_GOLD if col in ("G", "FA", "DT") else RETRO_WHITE
-			v_lbl = myfont_badge.render(str(val), 1, col_col)
+			v_lbl = myfont_badge.render(str(val), 1, RETRO_WHITE)
 			win.blit(v_lbl, (cx, row_y))
 			cx += _COL_W
 		row_y += _ROW_H
@@ -399,7 +636,7 @@ def ShowPostMatchScreen():
 	                    BACK_Y  + (BACK_H - back_lbl.get_height()) // 2))
 
 	# ── Event handling ────────────────────────────────────────────────────────
-	events = pygame.event.get()
+	events = _poll_events()
 	for event in events:
 		if event.type == pygame.KEYDOWN:
 			if event.key == pygame.K_TAB:
@@ -543,9 +780,7 @@ def open_settings():
 		pygame.time.delay(250)
 
 	pygame.display.update()
-	for event in pygame.event.get():
-		if event.type == pygame.QUIT:
-			pygame.quit()
+	_poll_events()
 
 ############### player identification starts here
 
@@ -590,7 +825,7 @@ class Player(object):
 		_agent_log("engine.Player.Initiate", "enter", {}, "H2")
 		# endregion
 		try:
-			r = load_roster()
+			r = selected_roster if selected_roster is not None else load_roster()
 			state.scoreboard_log = []
 			state.load_from_roster(r)
 			
@@ -733,13 +968,13 @@ class Player(object):
 	def StartIntLog():
 		with open(get_output_path('InterchangeLog.csv'), 'w', newline = '\n') as Int_CSV:
 			fieldnames = ['QTR', 'TIME', 'PLAYER'] + Player.stat_categories + ['TEAM', 'POSITION']
-			writer = csv.DictWriter(Int_CSV, fieldnames=fieldnames)
+			writer = TextCSVDictWriter(Int_CSV, fieldnames=fieldnames)
 			writer.writeheader()
 	
 	def Interchange_WriteInfo():
 		with open(get_output_path('InterchangeLog.csv'), 'a', newline = '\n') as Int_CSV:
 			fieldnames = ['QTR', 'TIME', 'PLAYER'] + Player.stat_categories + ['TEAM', 'POSITION']
-			Int_writer = csv.DictWriter(Int_CSV, fieldnames = fieldnames)
+			Int_writer = TextCSVDictWriter(Int_CSV, fieldnames = fieldnames)
 			if state.possession == "Home":
 				On_Player = state.home.pos_players[KeyON]
 				Off_Player = state.home.pos_players[KeyOFF]
@@ -1301,7 +1536,7 @@ class sim_game(object):
 
 	def EndOfQuarterScore():
 		with open(get_output_path('PlayerStats.csv'), 'a', newline= '\n') as RecordQTRscore:
-			Q_scoreWriter = csv.writer(RecordQTRscore)
+			Q_scoreWriter = TextCSVWriter(RecordQTRscore)
 			if state.qtr - 1 == 1:
 				Q_scoreWriter.writerow(['QTR',state.home.name + ' G',state.home.name + ' B',state.home.name + ' S',state.away.name + ' G',state.away.name + ' B',state.away.name + ' S'])
 			Q_scoreWriter.writerow([state.qtr-1,str(state.home_goals),str(state.home_behinds),str(state.home_score),str(state.away_goals),str(state.away_behinds),str(state.away_score)])
@@ -1397,7 +1632,7 @@ class sim_game(object):
 		cols = ['TEAM'] + [c for c in df.columns if c != 'TEAM']
 		df = df[cols]
 		
-		df.to_csv(get_output_path('PlayerStats.csv'), mode = 'a')
+		write_dataframe_csv(df, get_output_path('PlayerStats.csv'), mode = 'a')
 
 #team stats
 		df_home = df.iloc[0:20].drop(columns=['TEAM'])
@@ -1407,7 +1642,7 @@ class sim_game(object):
 		Join_df = [HomeTeamTotal, AwayTeamTotal]
 		TeamStats = pd.concat(Join_df, axis = 1)
 		TeamStats.columns = [state.home.name, state.away.name]
-		TeamStats.to_csv(get_output_path('TeamStats.csv'))
+		write_dataframe_csv(TeamStats, get_output_path('TeamStats.csv'))
 #form calc (BOG Rebuild)
 		for p, stats in FullStats.items():
 			# SI bonus depends on whether it resulted in a goal or behind
@@ -1439,10 +1674,10 @@ class sim_game(object):
 		Three_Votes = df_form.iat[0,1]
 		Two_Votes = df_form.iat[1,1]
 		One_Vote = df_form.iat[2,1]
-		df_form.to_csv(get_output_path('Form.csv'))
+		write_dataframe_csv(df_form, get_output_path('Form.csv'))
 #3-2-1 vote under stats
 		with open(get_output_path('PlayerStats.csv'), 'a', newline= '\n') as AddBOGVotes:
-			vote_writer = csv.writer(AddBOGVotes)
+			vote_writer = TextCSVWriter(AddBOGVotes)
 			vote_writer.writerow(['\n'])
 			vote_writer.writerow(['VOTES'])
 			vote_writer.writerow([3, 2, 1])
@@ -1480,7 +1715,7 @@ class sim_game(object):
 		production_report = pd.concat([df_home_clean, df_away_clean], axis=1)
 		
 		# Save without the row numbers (index=False)
-		production_report.to_csv(get_output_path('MatchReport.csv'), index=False)
+		write_dataframe_csv(production_report, get_output_path('MatchReport.csv'), index=False)
 #write scoring summary
 		with open(get_output_path("Scoring Summary.txt"), 'w') as ss:
 			ss.write("SCORING SUMMARY" + "\n")
@@ -1801,6 +2036,11 @@ class sim_game(object):
 
 	def Generate_Play_ballCarrier():
 		#state.speed = 7
+		# A disposal updates the ball coordinates before its outcome is resolved.
+		# Keep the starting position so a smother cannot carry the ball over the
+		# scoring line and be awarded as a goal on the same play.
+		pre_disposal_line = state.play_pos_line
+		pre_disposal_col = state.play_pos_col
 		
 		if state.action_type == "Out on the Full" or state.action_type == "Behind":
 			if state.play_pos_line == 2:
@@ -1908,6 +2148,8 @@ class sim_game(object):
 				state.comm_type = "Smothered"
 				state.action_type = "Lose Ball"
 				state.trans_type = "Defending"
+				state.play_pos_line = pre_disposal_line
+				state.play_pos_col = pre_disposal_col
 
 		Player.updatePlayerStats(state.possession, state.action_type, state.current_player)
 		BestOnGround.TrackForm(state.current_player, state.current_oppo)
@@ -2327,7 +2569,19 @@ class sim_game(object):
 		# endregion
 		_loop_logged = False
 		sim_game.GetRunSpeed()
-		Player.Initiate()
+		try:
+			Player.Initiate()
+		except (DuplicatePlayerNameError, UnsupportedNameError, SkillAllocationError) as exc:
+			global playing_match, on_main_menu, post_match
+			state.sim_running = False
+			playing_match = False
+			post_match = False
+			on_main_menu = True
+			if isinstance(exc, SkillAllocationError):
+				show_skill_allocation_error(str(exc))
+			else:
+				show_roster_error(str(exc))
+			return
 		# region agent log
 		_agent_log("engine.match_sim_running", "after_initiate", {"QTR": state.qtr}, "H3")
 		# endregion
@@ -2341,6 +2595,7 @@ class sim_game(object):
 		state.sim_running = True
 		sim_game._agent_logged_ms = False
 		while state.sim_running:
+			_poll_events()
 			if not _loop_logged:
 				# region agent log
 				_agent_log(
@@ -2459,42 +2714,177 @@ class sim_game(object):
 			sim_game.BallPosition()
 
 			pygame.display.update()
-			for event in pygame.event.get():
-				if event.type == pygame.QUIT:
-					pygame.quit()
+			_poll_events()
+
+
+def show_roster_error(message: str) -> None:
+	"""Show the invalid roster until acknowledged; allow retry from the menu."""
+	global run
+	font = pygame.font.SysFont("Verdana", 17)
+	lines, line = [], ""
+	for char in " ".join(message.split()):
+		if font.size(line + char)[0] > ScreenWidth - 80:
+			lines.append(line)
+			line = ""
+		line += char
+	lines.append(line)
+	offset = 0
+	while True:
+		win.fill((25, 30, 25))
+		win.blit(myfont_main.render("Cannot start match", True, Soft_Red), (40, 30))
+		for i, text in enumerate(lines[offset:offset + 9]):
+			win.blit(font.render(text, True, White), (40, 80 + i * 24))
+		win.blit(font.render("Edit the roster, then select Play Footy again.", True, White), (40, 320))
+		win.blit(font.render("Enter / Esc: back     Up / Down: scroll", True, White), (40, 350))
+		pygame.display.update()
+		for event in _poll_events():
+			if event.type == pygame.KEYDOWN:
+				if event.key in (pygame.K_RETURN, pygame.K_ESCAPE):
+					return
+				if event.key == pygame.K_DOWN:
+					offset = min(max(0, len(lines) - 9), offset + 1)
+				if event.key == pygame.K_UP:
+					offset = max(0, offset - 1)
+		clock.tick(30)
+
+
+def show_skill_allocation_error(message: str) -> None:
+	"""Show a branded, actionable error when a player breaks skill-budget rules."""
+	global run, on_main_menu, instructions, instructions_page
+	title_font = pygame.font.SysFont("Verdana", 28, bold=True)
+	heading_font = pygame.font.SysFont("Verdana", 14, bold=True)
+	body_font = pygame.font.SysFont("Consolas", 13)
+	small_font = pygame.font.SysFont("Consolas", 11)
+
+	# Wrap the player-specific validation message to fit its highlighted card.
+	words = " ".join(message.split()).split(" ")
+	message_lines, line = [], ""
+	for word in words:
+		candidate = f"{line} {word}".strip()
+		if body_font.size(candidate)[0] > 540 and line:
+			message_lines.append(line)
+			line = word
+		else:
+			line = candidate
+	if line:
+		message_lines.append(line)
+
+	while run:
+		win.blit(start_bg, (0, 0))
+		overlay = pygame.Surface((ScreenWidth, ScreenHeight), pygame.SRCALPHA)
+		overlay.fill((8, 10, 5, 230))
+		win.blit(overlay, (0, 0))
+
+		# Header and warning badge use the same match-day palette as the guides.
+		pygame.draw.circle(win, (190, 62, 42), (39, 39), 21)
+		pygame.draw.circle(win, (255, 145, 90), (39, 39), 21, 2)
+		bang = title_font.render("!", 1, RETRO_WHITE)
+		win.blit(bang, (39 - bang.get_width() // 2, 39 - bang.get_height() // 2))
+		win.blit(title_font.render("CHECK PLAYER SKILLS", 1, MENU_AMBER), (73, 18))
+		win.blit(myfont_menu_tag.render("The match cannot start until this roster entry is fixed.", 1, MENU_TAGLINE), (75, 51))
+		pygame.draw.line(win, MENU_BORDER, (18, 74), (622, 74), 2)
+
+		pygame.draw.rect(win, (53, 20, 16), (28, 89, 584, 82))
+		pygame.draw.rect(win, (210, 82, 55), (28, 89, 584, 82), 2)
+		win.blit(heading_font.render("WHAT NEEDS ATTENTION", 1, (255, 174, 120)), (43, 101))
+		for i, text in enumerate(message_lines[:2]):
+			win.blit(body_font.render(text, 1, RETRO_WHITE), (43, 127 + i * 19))
+
+		pygame.draw.rect(win, (20, 23, 13), (28, 184, 584, 105))
+		pygame.draw.rect(win, (86, 91, 48), (28, 184, 584, 105), 1)
+		win.blit(heading_font.render("SKILL ALLOCATION RULES", 1, MENU_AMBER_BRIGHT), (43, 196))
+		rules = [
+			"• Use zero or positive whole numbers for every skill.",
+			"• STR + SPD + AGI + SKL + END + PRS + AUR must total 100 or less.",
+			"• Blank skill cells use the default allocation: 15 each, plus 10 Aura.",
+		]
+		for i, rule in enumerate(rules):
+			win.blit(small_font.render(rule, 1, RETRO_WHITE), (43, 221 + i * 20))
+
+		win.blit(small_font.render("Edit TeamSelection.csv, save it, then choose Play Footy again.", 1, MENU_TAGLINE), (43, 305))
+
+		mx, my = pygame.mouse.get_pos()
+		back_rect = (95, 337, 210, 42)
+		guide_rect = (335, 337, 210, 42)
+		back_hover = back_rect[0] + back_rect[2] > mx > back_rect[0] and back_rect[1] + back_rect[3] > my > back_rect[1]
+		guide_hover = guide_rect[0] + guide_rect[2] > mx > guide_rect[0] and guide_rect[1] + guide_rect[3] > my > guide_rect[1]
+		_draw_menu_button(win, back_rect, MENU_OLIVE_HOVER if back_hover else MENU_OLIVE, MENU_BORDER)
+		_draw_menu_button(win, guide_rect, MENU_OLIVE_HOVER if guide_hover else MENU_OLIVE, MENU_BORDER)
+		back_label = myfont_menu_btn.render("< Back to Menu", 1, MENU_AMBER_BRIGHT if back_hover else MENU_AMBER)
+		guide_label = myfont_menu_btn.render("View Skill Guide >", 1, MENU_AMBER_BRIGHT if guide_hover else MENU_AMBER)
+		win.blit(back_label, (back_rect[0] + (back_rect[2] - back_label.get_width()) // 2,
+		                      back_rect[1] + (back_rect[3] - back_label.get_height()) // 2))
+		win.blit(guide_label, (guide_rect[0] + (guide_rect[2] - guide_label.get_width()) // 2,
+		                       guide_rect[1] + (guide_rect[3] - guide_label.get_height()) // 2))
+		pygame.display.update()
+
+		for event in _poll_events():
+			if event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_ESCAPE):
+				on_main_menu = True
+				return
+			if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+				if back_hover:
+					on_main_menu = True
+					return
+				if guide_hover:
+					on_main_menu = False
+					instructions = True
+					instructions_page = 2
+					return
+		clock.tick(30)
+
+
+class WindowClosed(Exception):
+	"""Unwind any active screen before shutting down Pygame."""
+
+
+def _poll_events():
+	events = pygame.event.get()
+	if any(event.type == pygame.QUIT for event in events):
+		raise WindowClosed()
+	return events
 
 
 def main() -> None:
 	"""Main pygame loop: menu, match simulation, post-match stats, and settings."""
 	# mouse/click must be module-level: UI helpers read them without receiving arguments.
-	global run, on_main_menu, playing_match, settings, post_match, mouse, click
+	global run, on_main_menu, playing_match, settings, instructions, instructions_page, post_match, mouse, click
 	run = True
 	on_main_menu = True
 	playing_match = False
 	settings = False
+	instructions = False
+	instructions_page = 1
 	post_match = False
 
-	while run:
-		pygame.event.get()
+	try:
+		while run:
+			pygame.event.pump()
 
-		clock.tick(20)
+			clock.tick(20)
 
-		mouse = pygame.mouse.get_pos()
-		click = pygame.mouse.get_pressed()
+			mouse = pygame.mouse.get_pos()
+			click = pygame.mouse.get_pressed()
 
-		if on_main_menu:
-			main_menu()
+			if on_main_menu:
+				main_menu()
 
-		elif playing_match:
-			sim_game.match_sim_running()
+			elif playing_match:
+				sim_game.match_sim_running()
 
-		elif post_match:
-			ShowPostMatchScreen()
+			elif post_match:
+				ShowPostMatchScreen()
 
-		elif settings:
-			open_settings()
+			elif settings:
+				open_settings()
 
-		for event in pygame.event.get():
-			if event.type == pygame.QUIT:
-				run = False
-	pygame.quit()
+			elif instructions:
+				open_instructions()
+
+			_poll_events()
+	except WindowClosed:
+		run = False
+	finally:
+		state.sim_running = False
+		playing_match = False
+		pygame.quit()
