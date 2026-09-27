@@ -1,8 +1,4 @@
-"""Match state: TeamState and MatchState hold all mutable data for a single match.
-
-Replaces the class-level mutable state on Player / sim_game / BestOnGround
-with proper instance attributes that are cleanly reset between matches.
-"""
+"""Team and match state, reset between simulations."""
 
 from __future__ import annotations
 
@@ -148,6 +144,7 @@ class MatchState:
         self.play_restart: bool = True
         self.boundary_throw_in: bool = False
         self.center_bounce: bool = False
+        self.kick_in_position: str = ""
         self.sim_running: bool = False
         self.sim_run_speed_delay: int = 40
 
@@ -233,6 +230,7 @@ class MatchState:
         self.play_restart = True
         self.boundary_throw_in = False
         self.center_bounce = False
+        self.kick_in_position = ""
         self.current_player = ""
         self.current_oppo = ""
         self.prev_player = ""
@@ -260,11 +258,7 @@ class MatchState:
         return PlayerStats()
 
     def is_clutch_time(self, player_aura: int = 10) -> bool:
-        """Check if clutch aura conditions are active for a given player's aura rating:
-        - Quarter 4
-        - Score margin <= 18 points (3 goals)
-        - game_minutes >= max(0, 20 - (player_aura / 100) * 20)
-        """
+        """Aura activates earlier in the final quarter when the margin is at most 18 points."""
         if self.qtr != 4:
             return False
         if abs(self.home_score - self.away_score) > 18:

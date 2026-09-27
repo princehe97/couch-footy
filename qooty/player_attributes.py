@@ -67,12 +67,7 @@ class PlayerStats:
         return getattr(self, stat_name.lower())
 
     def contest_probability(self, my_stat_name: str, opponent_stat_value: int) -> float:
-        """Calculate relative 1v1 contest probability against an opponent stat.
-
-        Formula:
-            P(win) = (my_stat / (my_stat + opp_stat)) * 0.40 + 0.30
-        Clamped to [0.30, 0.70]. If both are 0, returns 0.50.
-        """
+        """Return a 30-70% contest chance; two zero ratings give equal odds."""
         my_val = max(0, self.get_stat_value(my_stat_name))
         opp_val = max(0, opponent_stat_value)
 
@@ -88,14 +83,7 @@ class PlayerStats:
         stat_names: tuple[str, str],
         opponent_stats: "PlayerStats",
     ) -> float:
-        """Calculate relative 1v1 contest probability based on the product of two stats.
-
-        Formula:
-            my_rating = max(0, stat1) * max(0, stat2)
-            opp_rating = max(0, opp_stat1) * max(0, opp_stat2)
-            P(win) = (my_rating / (my_rating + opp_rating)) * 0.40 + 0.30
-        Clamped to [0.30, 0.70]. If total is 0, returns 0.50.
-        """
+        """Combine two stats multiplicatively; two zero ratings give equal odds."""
         stat1, stat2 = stat_names
         my_val1 = max(0, self.get_stat_value(stat1))
         my_val2 = max(0, self.get_stat_value(stat2))
@@ -113,32 +101,16 @@ class PlayerStats:
         return max(0.30, min(0.70, prob))
 
     def skill_probability(self) -> float:
-        """Calculate independent skill success probability.
-
-        Formula:
-            P(success) = 0.50 + (skill * 0.0015)
-        Range: 0.50 (at 0 skill) to 0.65 (at 100 skill).
-        """
+        """Return the chance of a successful disposal, independent of an opponent."""
         val = max(0, min(100, self.skill))
         return 0.50 + val * 0.0015
 
     def interchange_weight(self) -> int:
-        """Calculate weight for being subbed OFF during interchange.
-
-        Lower endurance -> higher weight to be subbed off.
-        Formula:
-            weight = max(1, 101 - endurance)
-        """
+        """Lower endurance makes a player more likely to be substituted off."""
         return max(1, 101 - self.endurance)
 
     def max_fresh_minutes(self) -> float:
-        """Calculate the max on-ground minutes before fatigue sets in based on Endurance.
-
-        Thresholds:
-        - 0 Endurance -> 60 minutes
-        - 50 Endurance -> 108 minutes
-        - 100 Endurance -> 140 minutes (full match, no penalty)
-        """
+        """Return on-ground minutes before fatigue starts."""
         if self.endurance >= 100:
             return 140.0
         elif self.endurance <= 0:
@@ -149,14 +121,7 @@ class PlayerStats:
             return 108.0 + 32.0 * ((self.endurance - 50.0) / 50.0)
 
     def with_fatigue_penalty(self, overtime_minutes: float = 0.0) -> "PlayerStats":
-        """Return a fatigued copy with compounding penalty applied to base physical stats.
-
-        Compounding curve:
-        - 0 mins overtime: 10% penalty (multiplier 0.90)
-        - 10 mins overtime: 25% penalty (multiplier 0.75)
-        - 20 mins overtime: 40% penalty (multiplier 0.60)
-        - 27+ mins overtime: max 50% penalty (multiplier 0.50)
-        """
+        """Reduce physical stats, skill and pressure; leave endurance and aura unchanged."""
         penalty = min(0.50, 0.10 + max(0.0, overtime_minutes) * 0.015)
         mult = 1.0 - penalty
         return PlayerStats(

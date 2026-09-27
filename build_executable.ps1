@@ -1,4 +1,6 @@
 $ErrorActionPreference = "Stop"
+$projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+Set-Location -LiteralPath $projectRoot
 
 python -m pip install --upgrade pyinstaller
 python -m PyInstaller `
@@ -13,4 +15,9 @@ python -m PyInstaller `
     --add-data "qooty/commentary.json;qooty" `
     run_game.py
 
-Write-Host "Built dist\CouchFooty.exe"
+Copy-Item -LiteralPath ".\dist\CouchFooty.exe" -Destination ".\CouchFooty.exe" -Force
+Remove-Item -LiteralPath ".\build" -Recurse -Force
+Remove-Item -LiteralPath ".\dist" -Recurse -Force
+Remove-Item -LiteralPath ".\CouchFooty.spec" -Force
+
+Write-Host "Built CouchFooty.exe"

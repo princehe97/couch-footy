@@ -2,67 +2,36 @@
 
 A desktop Australian-rules football match simulator.
 
-## Easiest option
+## Play
 
-Download `CouchFooty.exe`, place it in its own writable folder, and double-click
-it. On first launch it creates an editable `TeamSelection.csv` beside the
-executable. Match reports are written to an `outputs` folder in the same place.
+Download `CouchFooty.exe` from the [latest release](https://github.com/princehe97/couch-footy/releases/latest),
+place it in a writable folder, and double-click it. Python is not required.
+The app creates `TeamSelection.csv` on first launch and writes reports to `outputs/`.
 
-## Run from source
+Choose **Play Footy**, select each team from the CSV or **Saved teams**, then **Start match**.
+Use **Edit** to change names, allocate points or swap positions.
 
-1. Install Python 3.11 or newer from <https://www.python.org/downloads/>.
-2. Open a terminal in this folder.
-3. Create and activate a virtual environment:
+- **Save as new** creates a separate saved team; **Save changes** updates it.
+- **Apply changes** keeps CSV-team edits in match setup; use **Save as new** to keep them between sessions.
+- **Reload CSV** reloads both teams. **Update saved...** replaces a chosen saved roster after confirmation.
+- **Cancel** or Escape discards editor changes. **File issues** explains loading errors.
 
-   ```powershell
-   python -m venv .venv
-   .\.venv\Scripts\Activate.ps1
-   ```
+Each team needs 20 players, one per position. Player names must be unique across both teams,
+ignoring case and surrounding spaces. Use names without accents, emojis or special symbols.
+Each player has up to 100 points across seven attributes.
 
-4. Install the dependencies:
+Keep `TeamSelection.csv` and `saved_teams/` when upgrading. Saved teams work without the CSV;
+season, round and match ID are set separately for each match.
 
-   ```powershell
-   python -m pip install -r requirements.txt
-   ```
+## Development
 
-5. Start the game:
+Requires Python 3.11+ on Windows:
 
-   ```powershell
-   python run_game.py
-   ```
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python run_game.py
+```
 
-Edit `TeamSelection.csv` before starting if you want to change the teams,
-players, or player attributes. Match reports are created automatically in a
-new `outputs` folder after the game runs.
-
-## Save and reuse teams
-
-1. Choose **Play Footy** to open match setup. The current CSV teams appear first.
-2. Choose **Save as new** under either team to keep its roster and all seven
-   player point allocations. Each team is saved independently.
-3. Next time you open Couch Footy, choose **Saved teams** under Home or Away.
-   Select a team, review its players with the arrow buttons, and choose **Start match**.
-   Saved teams work even if the original CSV is unavailable.
-
-To edit a saved roster, select it under **Saved teams**, then choose **Edit**.
-Select a player to edit their name or use the **+ / -** controls to adjust their
-allocations. Each player has at most 100 points; reduce an allocation before
-adding points elsewhere. Choose **Swap position...**, then another player
-(on either page) to exchange positions, keeping their names and attributes together.
-Blank or duplicate player names are rejected, including differences only in case
-or surrounding spaces. You can also edit the team name. Please remove accents (for example, Jose instead
-of José), emojis and special symbols from team and player names.
-**Save changes** updates that saved team; **Cancel** or Escape discards all edits.
-For CSV teams, **Apply changes** returns to setup, where **Save as new** stores them.
-You can still use **Reload CSV** and **Update saved...** to replace a saved roster.
-**Save as new** creates a separate copy. The picker displays
-each team's unique ID so teams with identical names remain distinguishable.
-
-Teams live in the `saved_teams` folder beside `CouchFooty.exe` (or beside
-`run_game.py` for source runs), with one JSON file per team. Keep this folder
-when upgrading or moving the app. Season, round, and match ID belong to the
-match setup and can be edited there; they are not stored in team files.
-The roster preview shows strength, speed, agility, skill, endurance, pressure,
-and aura in that order. **File issues** explains any roster or saved-file errors.
-
-Run the automated checks with `python -m unittest discover -s tests -v`.
+Build: `./build_executable.ps1` replaces `CouchFooty.exe` and removes temporary build files.

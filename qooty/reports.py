@@ -1,8 +1,4 @@
-"""File I/O: commentary text, interchange logs, stat CSVs, and scoring summaries.
-
-Every function takes a MatchState so there is zero global state.
-All file handles use ``with`` to guarantee they are closed.
-"""
+"""Format and export match commentary and statistics."""
 
 from __future__ import annotations
 
@@ -59,11 +55,7 @@ def write_dataframe_csv(frame, path, **kwargs):
 
 
 def write_player_stat_exports(ms: MatchState, output_dir: Path | None = None) -> None:
-    """Export rectangular basic/advanced tables for the latest match.
-
-    Keep each team's roster separate so matching player names cannot overwrite
-    each other. Values, including the standard DT score, come from state.
-    """
+    """Export basic and advanced stats for every player in roster order."""
     for filename, categories in (
         ("BasicPlayerStats.csv", BASIC_PLAYER_STATS),
         ("AdvancedPlayerStats.csv", ADVANCED_PLAYER_STATS),

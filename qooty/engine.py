@@ -39,13 +39,14 @@ from qooty.constants import (
 	LIGHT_GREY as Light_Grey,
 	DARK_GREY as Dark_Grey,
 	BLACK as Black,
+	WEATHER_SPEED,
 )
 
 # For all internal UI geometry and surface layouts, keep ScreenWidth/ScreenHeight at native canvas resolution (640x400)
 ScreenWidth = CanvasWidth
 ScreenHeight = CanvasHeight
 
-# Real display window (1280x800: double size with identical 16:10 aspect ratio)
+# Scale the display while keeping game coordinates at the native canvas size.
 display_win = pygame.display.set_mode((WindowWidth, WindowHeight))
 
 # Virtual surface where all screens, backgrounds, and simulation render (640x400)
@@ -794,6 +795,8 @@ def open_settings():
 ############### player identification starts here
 
 class Player(object):
+	KICK_IN_POSITIONS = ("rBP", "FB", "lBP")
+	FOLLOWER_WEIGHTS = {"RUCK": 10, "RR": 45, "R": 45}
 	homeTeam = ''
 	awayTeam = ''
 	homePlayers = []
@@ -830,9 +833,9 @@ class Player(object):
 	FollowWithBall = False
 
 	def Initiate():
-		# region agent log
+
 		_agent_log("engine.Player.Initiate", "enter", {}, "H2")
-		# endregion
+
 		try:
 			r = selected_roster if selected_roster is not None else load_roster()
 			state.scoreboard_log = []
@@ -889,29 +892,28 @@ class Player(object):
 				
 			Player.Assign_MatchUps()
 			Player.Possession_Index()
-			# region agent log
+
 			_agent_log(
 				"engine.Player.Initiate",
 				"complete",
 				{"home_players": len(state.home.players), "pos_keys": len(state.home.pos_index)},
 				"H2",
 			)
-			# endregion
+
 		except Exception as e:
-			# region agent log
+
 			_agent_log(
 				"engine.Player.Initiate",
 				"exception",
 				{"type": type(e).__name__, "msg": str(e)[:800]},
 				"H2",
 			)
-			# endregion
+
 			raise
 
-		# assign genders — TBA
 
 	def _write_interchange_comm(pos_players, key_on, key_off, team_name, other_bench_key):
-		"""Write interchange commentary to Commentary.txt using a safe 'with' block."""
+		"""Append an interchange event to Commentary.txt."""
 		on_name = pos_players[key_on]
 		off_name = pos_players[key_off]
 		other_name = pos_players[other_bench_key]
@@ -1144,6 +1146,54 @@ class Player(object):
 			CB_RoverRoll = random.randint(-1,1)
 			state.play_pos_col = CB_RoverRoll
 			state.center_bounce = False
+
+	def SetKickInPlayer():
+		"""Give a behind kick-in to the selected deep defender at their real coordinate."""
+		position = state.kick_in_position or random.choice(Player.KICK_IN_POSITIONS)
+		if state.play_pos_line == 2:
+			state.possession = "Away"
+			team = state.away
+			position_key = "a_" + position
+		elif state.play_pos_line == -2:
+			state.possession = "Home"
+			team = state.home
+			position_key = "h_" + position
+		else:
+			return
+
+		state.prev_player = state.current_player
+		state.current_player = team.pos_players[position_key]
+		(state.play_pos_col, state.play_pos_line), _ = Player.RevDict_FieldPosition[position_key]
+		Player.UpdateOpponent()
+		state.kick_in_position = ""
+
+	def AvoidKickInSelfTarget():
+		"""Move a zero-distance lateral kick-in to an adjacent deep defender."""
+		if state.action_type not in ("Kick", "EffectiveKick", "Handball"):
+			return
+		lookup = ((state.play_pos_col, state.play_pos_line), state.possession)
+		position_key = Player.Dict_FieldPosition.get(lookup)
+		if not position_key:
+			return
+		team = state.home if state.possession == "Home" else state.away
+		if team.pos_players.get(position_key) != state.current_player:
+			return
+
+		if state.play_pos_col < 0:
+			state.play_pos_col += 1
+		elif state.play_pos_col > 0:
+			state.play_pos_col -= 1
+		else:
+			state.play_pos_col = random.choice((-1, 1))
+
+	@staticmethod
+	def FollowerPosition(roll):
+		"""Map a 1..100 roll to the requested 10/45/45 follower split."""
+		if roll <= Player.FOLLOWER_WEIGHTS["RUCK"]:
+			return "RUCK"
+		if roll <= Player.FOLLOWER_WEIGHTS["RUCK"] + Player.FOLLOWER_WEIGHTS["RR"]:
+			return "RR"
+		return "R"
 	
 	def Follower():
 		if state.possession in ["Home", "Away"] and state.action_type != "Tackle":
@@ -1158,28 +1208,15 @@ class Player(object):
 				p_prefix = "a_"
 				o_prefix = "h_"
 
-			PLAYER_Roll = random.randint(1,10)
-			if PLAYER_Roll <= 2:
-				state.current_player = player_dict[p_prefix + 'RUCK']
-				state.current_oppo = oppo_dict[o_prefix + 'RUCK']
-				if state.current_player == state.prev_player:
-					state.current_player = player_dict[p_prefix + 'RR']
-					state.current_oppo = oppo_dict[o_prefix + 'RR']
-				state.follow_with_ball = True
-			elif 2 < PLAYER_Roll <= 6:
-				state.current_player = player_dict[p_prefix + 'RR']
-				state.current_oppo = oppo_dict[o_prefix + 'RR']
-				if state.current_player == state.prev_player:
-					state.current_player = player_dict[p_prefix + 'R']
-					state.current_oppo = oppo_dict[o_prefix + 'R']
-				state.follow_with_ball = True
-			elif 6 < PLAYER_Roll <= 10:
-				state.current_player = player_dict[p_prefix + 'R']
-				state.current_oppo = oppo_dict[o_prefix + 'R']
-				if state.current_player == state.prev_player:
-					state.current_player = player_dict[p_prefix + 'RUCK']
-					state.current_oppo = oppo_dict[o_prefix + 'RUCK']
-				state.follow_with_ball = True
+			position = Player.FollowerPosition(random.randint(1, 100))
+			fallback = {"RUCK": "RR", "RR": "R", "R": "RUCK"}
+			state.current_player = player_dict[p_prefix + position]
+			state.current_oppo = oppo_dict[o_prefix + position]
+			if state.current_player == state.prev_player:
+				position = fallback[position]
+				state.current_player = player_dict[p_prefix + position]
+				state.current_oppo = oppo_dict[o_prefix + position]
+			state.follow_with_ball = True
 		else:
 			PossessionRoll = random.randint(1,2)
 			if PossessionRoll == 1:
@@ -1597,34 +1634,9 @@ class sim_game(object):
 		weatherComm.close()
 
 	def GetConditions(MatchWeather, Transaction):
-		if MatchWeather == "Fine":
-			if Transaction == "Contest":
-				state.speed = 4
-			elif Transaction == "Defending":
-				state.speed = 3
-			elif Transaction == "Carrying":
-				state.speed = 6
-		elif MatchWeather == "Warm":
-			if Transaction == "Contest":
-				state.speed = 4
-			elif Transaction == "Defending":
-				state.speed = 3
-			elif Transaction == "Carrying":
-				state.speed = 7
-		elif MatchWeather == "Cloudy":
-			if Transaction == "Contest":
-				state.speed = 5
-			elif Transaction == "Defending":
-				state.speed = 4
-			elif Transaction == "Carrying":
-				state.speed = 7
-		elif MatchWeather == "Rainy":
-			if Transaction == "Contest":
-				state.speed = 6
-			elif Transaction == "Defending":
-				state.speed = 5
-			elif Transaction == "Carrying":
-				state.speed = 7
+		weather_speeds = WEATHER_SPEED.get(MatchWeather)
+		if weather_speeds is not None and Transaction in weather_speeds:
+			state.speed = weather_speeds[Transaction]
 	
 	def GenerateStatReports():
 		write_player_stat_exports(state)
@@ -1655,21 +1667,14 @@ class sim_game(object):
 		write_dataframe_csv(TeamStats, get_output_path('TeamStats.csv'))
 #form calc (BOG Rebuild)
 		for p, stats in FullStats.items():
-			# SI bonus depends on whether it resulted in a goal or behind
-			# Formula: SI*2 (+1 bonus for Goal), Intercepts*2, CW*2, TO*2
 			si_score = stats['SI'] * 2
 			if stats['G'] > 0: 
 				si_score += stats['G'] 
 				
-			# Final BOG Score: Disposals + SI + Intercepts + Net Contests - Turnovers + Direct Scoring + Rebounds
-			# Goals are weighted at 6 points each.
 			# Intercepts are weighted at 4 points each to ensure defenders can challenge for BOG.
-			# Net Contests (CW - CL) reward efficiency in 1v1s.
-			# Rebounds (R50) reward defenders for retaining possession coming out of defense.
 			net_contests = stats['CW'] - stats.get('CL', 0)
 			rebound_buff = stats.get('R50', 0) * 2
 			bog_score = (stats['K'] + stats['HB']) + si_score + (stats['INT'] * 4) + (net_contests * 2) - (stats['TO'] * 2) + (stats['G'] * 6) - stats['B'] + rebound_buff
-			# Store the calculated BOG score into the form dictionary
 			if p in state.home.player_form:
 				state.home.player_form[p] = bog_score
 			elif p in state.away.player_form:
@@ -2071,19 +2076,22 @@ class sim_game(object):
 
 	def Generate_Play_ballCarrier():
 		#state.speed = 7
-		# A disposal updates the ball coordinates before its outcome is resolved.
-		# Keep the starting position so a smother cannot carry the ball over the
-		# scoring line and be awarded as a goal on the same play.
-		pre_disposal_line = state.play_pos_line
-		pre_disposal_col = state.play_pos_col
-		
-		if state.action_type == "Out on the Full" or state.action_type == "Behind":
+		is_kick_in = state.action_type == "Behind"
+		if state.action_type == "Out on the Full":
 			if state.play_pos_line == 2:
 				state.possession = "Away"
 				state.current_player = state.current_oppo
 			elif state.play_pos_line == -2:
 				state.possession = "Home"
 				state.current_player = state.current_oppo
+		elif is_kick_in:
+			Player.SetKickInPlayer()
+
+		# A disposal updates the ball coordinates before its outcome is resolved.
+		# Keep the starting position so a smother cannot carry the ball over the
+		# scoring line and be awarded as a goal on the same play.
+		pre_disposal_line = state.play_pos_line
+		pre_disposal_col = state.play_pos_col
 
 		isSideways = random.randint(0,1)
 		movementRoll = random.randint(1,100)
@@ -2167,6 +2175,9 @@ class sim_game(object):
 					sim_game.PlayBook("Long Kick", 2, 2, "forwards")
 					state.action_type = "Kick"
 					state.comm_type = "Long Bomb"
+
+		if is_kick_in:
+			Player.AvoidKickInSelfTarget()
 		
 		# --- Smother chance on Kick or Handball (Opponent's Pressure vs Carrier's Agility) ---
 		if state.action_type in ("Kick", "Handball"):
@@ -2256,6 +2267,7 @@ class sim_game(object):
 					state.home_behinds += 1
 					state.play_pos_line = 2
 					state.play_pos_col = 0
+					state.kick_in_position = random.choice(Player.KICK_IN_POSITIONS)
 					state.action_type = "Behind"
 					state.trans_type = "Carrying"
 					state.comm_type = "Behind Kicked"
@@ -2310,6 +2322,7 @@ class sim_game(object):
 					state.away_behinds += 1
 					state.play_pos_line = -2
 					state.play_pos_col = 0
+					state.kick_in_position = random.choice(Player.KICK_IN_POSITIONS)
 					state.action_type = "Behind"
 					state.trans_type = "Carrying"
 					state.comm_type = "Behind Kicked"
@@ -2519,26 +2532,26 @@ class sim_game(object):
 	
 	def match_sim_running():
 		global match_status, commentary, displayTime
-		# region agent log
+
 		_agent_log(
 			"engine.match_sim_running",
 			"enter",
 			{"QTR": state.qtr, "sim_running_before": state.sim_running},
 			"H5",
 		)
-		# endregion
+
 		sim_game.reset_state_for_new_match()
 		match_status = "In Progress"
 		commentary = ""
 		displayTime = "0:00"
-		# region agent log
+
 		_agent_log(
 			"engine.match_sim_running",
 			"after_reset_state",
 			{"QTR": state.qtr, "match_status": match_status},
 			"H5",
 		)
-		# endregion
+
 		_loop_logged = False
 		sim_game.GetRunSpeed()
 		try:
@@ -2554,22 +2567,22 @@ class sim_game(object):
 			else:
 				show_roster_error(str(exc))
 			return
-		# region agent log
+
 		_agent_log("engine.match_sim_running", "after_initiate", {"QTR": state.qtr}, "H3")
-		# endregion
+
 		Player.StartIntLog()
 		BestOnGround.MakeLists()
 		sim_game.Comm_MatchStart()
 		sim_game.RandomWeather()
-		# region agent log
+
 		_agent_log("engine.match_sim_running", "before_while_loop", {"QTR": state.qtr}, "H3")
-		# endregion
+
 		state.sim_running = True
 		sim_game._agent_logged_ms = False
 		while state.sim_running:
 			_poll_events()
 			if not _loop_logged:
-				# region agent log
+
 				_agent_log(
 					"engine.match_sim_running",
 					"first_while_frame",
@@ -2580,7 +2593,7 @@ class sim_game(object):
 					},
 					"H4",
 				)
-				# endregion
+
 				_loop_logged = True
 
 			win.blit(game_bg, (0,0))
@@ -2617,14 +2630,14 @@ class sim_game(object):
 
 			sim_game.GamePlayTime()
 			if not getattr(sim_game, "_agent_logged_ms", False):
-				# region agent log
+
 				_agent_log(
 					"engine.match_sim_running",
 					"after_first_GamePlayTime",
 					{"match_status": repr(globals().get("match_status", "__ABSENT__")), "QTR": state.qtr},
 					"H4",
 				)
-				# endregion
+
 				sim_game._agent_logged_ms = True
 
 			if match_status == "In Progress":

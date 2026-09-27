@@ -188,11 +188,7 @@ def _parse_csv(path: Path) -> RosterData:
 
 
 def load_roster(base_dir: Path | None = None) -> RosterData:
-	"""
-	Load roster from ``TeamSelection.csv``.
-
-	:param base_dir: Directory containing team files (default: current working directory).
-	"""
+	"""Load TeamSelection.csv from base_dir, or the current working directory."""
 	root = base_dir or Path.cwd()
 	csv_path = root / CSV_NAME
 	_agent_log(

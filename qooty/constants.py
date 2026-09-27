@@ -29,7 +29,7 @@ BLACK = (0, 0, 0)
 CANVAS_WIDTH = 640
 CANVAS_HEIGHT = 400
 
-# Scaling factor (1.5 = scaled down 25% from double size: 960x600, maintaining exact 16:10 aspect ratio)
+# Scale the window without changing game coordinates.
 WINDOW_SCALE = 1.5
 
 # Actual display window dimensions
@@ -179,10 +179,12 @@ AWAY_COORD_TO_POS: dict[tuple[int, int], str] = {
 
 #  weather → trans_type → speed (seconds per tick)
 WEATHER_SPEED: dict[str, dict[str, int]] = {
-    "Fine":   {"Contest": 4, "Defending": 3, "Carrying": 6},
-    "Warm":   {"Contest": 4, "Defending": 3, "Carrying": 7},
-    "Cloudy": {"Contest": 5, "Defending": 4, "Carrying": 7},
-    "Rainy":  {"Contest": 6, "Defending": 5, "Carrying": 7},
+    # Each transaction consumes one fewer match-clock second, creating more
+    # passages of play while retaining the relative weather slowdown.
+    "Fine":   {"Contest": 3, "Defending": 2, "Carrying": 5},
+    "Warm":   {"Contest": 3, "Defending": 2, "Carrying": 6},
+    "Cloudy": {"Contest": 4, "Defending": 3, "Carrying": 6},
+    "Rainy":  {"Contest": 5, "Defending": 4, "Carrying": 6},
 }
 
 SIM_SPEED_DELAY: dict[str, int] = {
